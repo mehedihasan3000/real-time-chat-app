@@ -1,0 +1,13 @@
+node_modules/
+.next/
+dist/
+coverage/
+package-lock.json
+
+# Private process documents are maintained outside the public repository.
+docs/
+infra/
+SRS_Real_Time_Chat_and_Calling_v0.1.md
+TASKS.md
+AGENTS.md
+INFO.md

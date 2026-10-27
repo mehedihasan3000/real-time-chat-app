@@ -1,0 +1,35 @@
+{
+  "name": "real-time-chat-app",
+  "version": "0.0.0",
+  "private": true,
+  "description": "One-to-one real-time chat and calling web application.",
+  "engines": {
+    "node": ">=24.0.0 <25.0.0"
+  },
+  "packageManager": "npm@11.6.2",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run build -w @chat/contracts && concurrently -n web,api -c blue,green \"npm run dev -w @chat/web\" \"npm run dev -w @chat/api\"",
+    "build": "npm run build -w @chat/contracts && npm run build -w @chat/api && npm run build -w @chat/web",
+    "start": "concurrently -n web,api -c blue,green \"npm run start -w @chat/web\" \"npm run start -w @chat/api\"",
+    "typecheck": "npm run build -w @chat/contracts && npm run typecheck -w @chat/contracts && npm run typecheck -w @chat/api && npm run typecheck -w @chat/web",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@types/node": "^24.19.2",
+    "concurrently": "^10.0.6",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "^16.4.3",
+    "eslint-config-prettier": "^10.1.8",
+    "globals": "^16.4.0",
+    "prettier": "^3.9.10",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.72.1"
+  }
+}
