@@ -28,7 +28,7 @@ export default defineConfig([
     },
   },
   {
-    files: ["apps/api/**/*.ts", "packages/**/*.ts"],
+    files: ["apps/api/**/*.ts", "packages/**/*.ts", "scripts/**/*.mjs"],
     languageOptions: {
       globals: {
         ...globals.node,
@@ -40,6 +40,14 @@ export default defineConfig([
     languageOptions: {
       globals: {
         ...globals.browser,
+      },
+    },
+  },
+  {
+    files: ["apps/web/next.config.ts"],
+    languageOptions: {
+      globals: {
+        ...globals.node,
       },
     },
   },

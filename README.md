@@ -4,15 +4,17 @@ One-to-one real-time chat and audio/video calling web application.
 
 ## Status
 
-This repository is at the application-scaffold stage. The workspace, local build, typecheck,
-and lint tooling are in place. Product features, security controls, capacity evidence, and
-accessibility verification land in later tasks. No security, capacity, or accessibility claim
-is made yet.
+This repository is at the application-scaffold and local-environment stage. The workspace,
+local build, typecheck, lint, environment validation, database check, synthetic seed, and AI
+mock are in place. Product features, security controls, capacity evidence, and accessibility
+verification land in later tasks. No security, capacity, or accessibility claim is made yet.
 
 ## Requirements
 
 - Node.js 24 (`.nvmrc` pins the major version)
 - npm 11 (declared in `packageManager`)
+- MongoDB: either a free MongoDB Atlas M0 development cluster, or Docker for the optional
+  local MongoDB service
 
 ## Workspace layout
 
@@ -21,37 +23,94 @@ is made yet.
 | `apps/web/`           | Next.js App Router frontend (React, TypeScript, CSS Modules) |
 | `apps/api/`           | Express 5 API (TypeScript, ESM, `tsx` in development)        |
 | `packages/contracts/` | Shared transport-agnostic TypeScript contracts               |
+| `scripts/`            | Local-development verification scripts                       |
+| `docker-compose.yml`  | Optional local MongoDB and coturn test services              |
 | `tsconfig.base.json`  | Shared strict TypeScript settings                            |
 | `eslint.config.mjs`   | Flat ESLint configuration for the whole workspace            |
 
 ## Getting started
 
-```bash
-npm install
-npm run dev
-```
+1. Install dependencies:
 
-`npm run dev` builds the shared contracts package, then starts the web app at
-`http://localhost:3000` and the API at `http://localhost:3001`. The API exposes
-`GET /health`, which returns a typed `HealthResponse` from `@chat/contracts`.
+   ```bash
+   npm install
+   ```
+
+2. Create your local environment file from the committed example:
+
+   ```bash
+   cp .env.example .env
+   ```
+
+   On PowerShell, use `Copy-Item .env.example .env`.
+
+3. Choose a development database:
+
+   - **Local Docker (no cloud account):**
+
+     ```bash
+     docker compose up -d mongo
+     ```
+
+     The default `MONGODB_URI` in `.env.example` points at this service.
+
+   - **MongoDB Atlas (free M0 development cluster):** create a cluster, create a
+     development-only database user, allow your current IP, then set `MONGODB_URI` in `.env`
+     to your Atlas connection string. Keep `MONGODB_DB=real_time_chat_dev`; the synthetic seed
+     refuses database names that do not end in `_dev`, `_local`, or `_test`.
+
+4. Verify the local environment:
+
+   ```bash
+   npm run verify:local
+   ```
+
+   This validates configuration, pings MongoDB, writes synthetic fixtures, and exercises the
+   network-free AI mock. It never prints the database URI or credentials.
+
+5. Start the stack:
+
+   ```bash
+   npm run dev
+   ```
+
+The web app runs at `http://localhost:3000` and the API at `http://localhost:3001`. The API
+exposes `GET /health`, which returns a typed `HealthResponse` from `@chat/contracts`.
 
 ## Commands
 
-| Command                | Description                                  |
-| ---------------------- | -------------------------------------------- |
-| `npm run dev`          | Run the web and API development servers      |
-| `npm run build`        | Build contracts, API, and web for production |
-| `npm start`            | Start the built web and API servers          |
-| `npm run typecheck`    | Typecheck every workspace                    |
-| `npm run lint`         | Lint the repository with ESLint              |
-| `npm run format`       | Format with Prettier                         |
-| `npm run format:check` | Verify formatting without writing            |
+| Command                | Description                                                |
+| ---------------------- | ---------------------------------------------------------- |
+| `npm run dev`          | Run the web and API development servers                    |
+| `npm run build`        | Build contracts, API, and web for production               |
+| `npm start`            | Start the built web and API servers                        |
+| `npm run typecheck`    | Typecheck every workspace                                  |
+| `npm run lint`         | Lint the repository with ESLint                            |
+| `npm run format`       | Format with Prettier                                       |
+| `npm run format:check` | Verify formatting without writing                          |
+| `npm run config:check` | Validate `.env` and print a redacted configuration summary |
+| `npm run db:check`     | Connect to MongoDB and run a `ping`                        |
+| `npm run seed`         | Upsert synthetic local fixtures into `dev_fixtures`        |
+| `npm run smoke:ai`     | Exercise the local AI mock without a network request       |
+| `npm run verify:local` | Run the config, database, seed, and AI checks together     |
 
 ## Configuration
 
-Runtime configuration is environment-based. `.env.example`, validated configuration, and the
-local development stack are added by the local-environment task. Do not commit credentials,
-production data, private message content, database dumps, or backups.
+Runtime configuration is environment-based. `.env.example` documents every local variable;
+copy it to `.env` and keep `.env` out of Git. No production credentials are required or
+included.
+
+- `MONGODB_URI` and `MONGODB_DB` select the development database. The API and local scripts
+  never log the URI.
+- `BETTER_AUTH_SECRET` is a local-only placeholder until authentication lands in a later
+  task. Generate your own value for any shared development environment.
+- `AI_PROVIDER=mock` is the default. It makes no network request and requires no provider
+  key. A real provider is not wired up yet.
+- `TURN_*` values describe the optional local coturn test service. They are test credentials,
+  not production relay credentials.
+- The API validates configuration at startup and exits with a safe error when a required value
+  is missing or invalid. `npm run config:check` performs the same validation without starting
+  the server.
 
 ## Branching
 
@@ -60,4 +119,6 @@ force pushes, and branch deletion are blocked.
 
 ## Security
 
-Do not open public issues containing secrets, private message content, or personal data.
+Do not commit `.env`, credentials, production data, private message content, database dumps, or
+backups. Do not open public issues containing secrets, private message content, or personal
+data. The local TURN and AI mock values are for development only.
