@@ -1,11 +1,41 @@
 import { createApp } from "./app.js";
+import {
+  ConfigError,
+  describeConfig,
+  loadConfig,
+  loadRootEnvFile,
+  type AppConfig,
+} from "./config.js";
 
-const port = Number(process.env.PORT ?? 3001);
+loadRootEnvFile();
+
+const config = loadRequiredConfig();
 const app = createApp();
 
-const server = app.listen(port, () => {
-  console.log(`API listening on http://localhost:${port}`);
+const server = app.listen(config.port, () => {
+  const summary = describeConfig(config);
+  console.log(
+    `API listening on http://localhost:${config.port} (env=${summary.nodeEnv}, db=${summary.mongodb.dbName}, ai=${summary.ai.provider})`,
+  );
 });
+
+function loadRequiredConfig(): AppConfig {
+  try {
+    return loadConfig();
+  } catch (error) {
+    if (error instanceof ConfigError) {
+      console.error("Invalid environment configuration:");
+      for (const issue of error.issues) {
+        console.error(`- ${issue}`);
+      }
+      console.error("Copy .env.example to .env and fill in the required local values.");
+    } else {
+      console.error("Failed to load environment configuration.");
+    }
+
+    process.exit(1);
+  }
+}
 
 function shutdown(signal: string): void {
   console.log(`Received ${signal}; shutting down.`);

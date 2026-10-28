@@ -1,0 +1,46 @@
+# Local-only development services.
+# Start with: docker compose up -d
+# These services use test credentials and must never be used in staging or production.
+
+name: real-time-chat-local
+
+services:
+  mongo:
+    image: mongo:8.0
+    container_name: chat-local-mongo
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Optional local TURN endpoint for future WebRTC call testing.
+  # Relayed media through Docker NAT may need --external-ip set to the host IP.
+  coturn:
+    image: coturn/coturn:4.6.3
+    container_name: chat-local-coturn
+    restart: unless-stopped
+    ports:
+      - "3478:3478/udp"
+      - "3478:3478/tcp"
+      - "49160-49200:49160-49200/udp"
+    command:
+      - "--lt-cred-mech"
+      - "--user=dev:dev-only-not-a-secret"
+      - "--realm=chat.local"
+      - "--fingerprint"
+      - "--no-cli"
+      - "--no-tls"
+      - "--no-dtls"
+      - "--min-port=49160"
+      - "--max-port=49200"
+      - "--log-file=stdout"
+      - "--simple-log"
+
+volumes:
+  mongo-data:

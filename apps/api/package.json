@@ -8,11 +8,18 @@
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
-    "typecheck": "tsc -p tsconfig.json --noEmit"
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "config:check": "tsx src/dev/check-config.ts",
+    "db:check": "tsx src/dev/db-check.ts",
+    "seed": "tsx src/dev/seed.ts",
+    "smoke:ai": "tsx src/dev/smoke-ai.ts"
   },
   "dependencies": {
     "@chat/contracts": "*",
-    "express": "^5.3.0"
+    "dotenv": "^18.0.9",
+    "express": "^5.3.0",
+    "mongodb": "^7.7.0",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/express": "^5.0.6",
