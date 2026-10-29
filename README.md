@@ -4,12 +4,13 @@ One-to-one real-time chat and audio/video calling web application.
 
 ## Status
 
-This repository is at the application-scaffold and local-environment stage. The workspace,
-local build, typecheck, lint, environment validation, database check, synthetic seed, and AI
-mock are in place. Automated CI quality gates cover formatting, linting, typechecking, the
-build, unit and contract tests, a dependency audit, and a tracked-file secret scan. Product
-features, security controls, capacity evidence, and accessibility verification land in later
-tasks. No security, capacity, or accessibility claim is made yet.
+This repository is at the application-scaffold and UI-shell stage. The workspace, local build,
+typecheck, lint, environment validation, database check, synthetic seed, and AI mock are in
+place. Automated CI quality gates cover formatting, linting, typechecking, the build, unit and
+contract tests, a dependency audit, and a tracked-file secret scan. The web app now has a
+navigable shell for every MVP surface; the screens are static placeholders and do not call the
+API. Product features, security controls, capacity evidence, and accessibility verification land
+in later tasks. No security, capacity, or accessibility claim is made yet.
 
 ## Requirements
 
@@ -78,6 +79,29 @@ tasks. No security, capacity, or accessibility claim is made yet.
 
 The web app runs at `http://localhost:3000` and the API at `http://localhost:3001`. The API
 exposes `GET /health`, which returns a typed `HealthResponse` from `@chat/contracts`.
+
+## UI shell
+
+The web app includes a navigable UI shell for the MVP surfaces. Every screen is a static
+placeholder: it does not create a session, load or send messages, request microphone or camera
+access, invoke an AI provider, or persist a preference. The app shell always displays
+“Not connected”.
+
+| Route                                                                          | Surface                                                                          |
+| ------------------------------------------------------------------------------ | -------------------------------------------------------------------------------- |
+| `/`                                                                            | Landing page and route inventory                                                 |
+| `/sign-in`, `/sign-up`, `/verify-email`, `/forgot-password`, `/reset-password` | Authentication screens                                                           |
+| `/conversations`, `/conversations/[conversationId]`                            | Conversation list and thread layout                                              |
+| `/search`                                                                      | Exact-username discovery                                                         |
+| `/profile`, `/profile/[username]`                                              | Own and public profile views                                                     |
+| `/calls`, `/calls/[callId]`                                                    | Call history and call detail                                                     |
+| `/ai`                                                                          | Release-gated AI surfaces                                                        |
+| `/settings`                                                                    | Account, privacy, language, data, and session sections                           |
+| `/states`                                                                      | Shared loading, empty, error, disconnected, unauthorized, and unsupported states |
+
+The shell includes a skip link, visible keyboard focus, labelled controls, semantic landmarks,
+responsive layouts, and reduced-motion handling. Bengali localization is not part of this shell;
+English copy is provisional. The shell is not an accessibility conformance claim.
 
 ## Commands
 
