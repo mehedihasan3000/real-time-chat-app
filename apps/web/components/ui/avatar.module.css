@@ -1,0 +1,29 @@
+.avatar {
+  display: inline-grid;
+  flex: 0 0 auto;
+  place-items: center;
+  background: hsl(var(--avatar-hue) 55% 32%);
+  border: 1px solid hsl(var(--avatar-hue) 55% 45%);
+  border-radius: 50%;
+  color: #fff;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.sm {
+  width: 2rem;
+  height: 2rem;
+  font-size: var(--text-xs);
+}
+
+.md {
+  width: 3rem;
+  height: 3rem;
+  font-size: var(--text-md);
+}
+
+.lg {
+  width: 5rem;
+  height: 5rem;
+  font-size: var(--text-xl);
+}
