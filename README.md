@@ -6,8 +6,10 @@ One-to-one real-time chat and audio/video calling web application.
 
 This repository is at the application-scaffold and local-environment stage. The workspace,
 local build, typecheck, lint, environment validation, database check, synthetic seed, and AI
-mock are in place. Product features, security controls, capacity evidence, and accessibility
-verification land in later tasks. No security, capacity, or accessibility claim is made yet.
+mock are in place. Automated CI quality gates cover formatting, linting, typechecking, the
+build, unit and contract tests, a dependency audit, and a tracked-file secret scan. Product
+features, security controls, capacity evidence, and accessibility verification land in later
+tasks. No security, capacity, or accessibility claim is made yet.
 
 ## Requirements
 
@@ -84,10 +86,15 @@ exposes `GET /health`, which returns a typed `HealthResponse` from `@chat/contra
 | `npm run dev`          | Run the web and API development servers                    |
 | `npm run build`        | Build contracts, API, and web for production               |
 | `npm start`            | Start the built web and API servers                        |
-| `npm run typecheck`    | Typecheck every workspace                                  |
+| `npm run typecheck`    | Typecheck every workspace, including tests                 |
 | `npm run lint`         | Lint the repository with ESLint                            |
 | `npm run format`       | Format with Prettier                                       |
 | `npm run format:check` | Verify formatting without writing                          |
+| `npm test`             | Run unit and contract tests with coverage thresholds       |
+| `npm run test:watch`   | Run tests in watch mode                                    |
+| `npm run audit:ci`     | Fail on low-or-higher dependency vulnerabilities           |
+| `npm run secret:scan`  | Scan tracked files for high-confidence secret patterns     |
+| `npm run ci:local`     | Run the same gates as CI locally                           |
 | `npm run config:check` | Validate `.env` and print a redacted configuration summary |
 | `npm run db:check`     | Connect to MongoDB and run a `ping`                        |
 | `npm run seed`         | Upsert synthetic local fixtures into `dev_fixtures`        |
@@ -111,6 +118,17 @@ included.
 - The API validates configuration at startup and exits with a safe error when a required value
   is missing or invalid. `npm run config:check` performs the same validation without starting
   the server.
+
+## Continuous integration
+
+The `.github/workflows/ci.yml` workflow runs on every pull request, on pushes to `main`, and on
+manual dispatch. The single `ci` job installs from the lockfile with `npm ci` and runs
+formatting, linting, typechecking, the build, unit and contract tests with coverage, a
+dependency audit, and a tracked-file secret scan. It requires no production credentials or
+external services. JUnit and coverage reports are uploaded as the `test-reports` artifact.
+
+`main` requires the `ci` status check. A pull request with a failing or missing `ci` run cannot
+be merged, even when all other review settings pass.
 
 ## Branching
 

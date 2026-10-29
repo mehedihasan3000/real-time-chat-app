@@ -12,6 +12,7 @@ export default defineConfig([
     "**/.next/**",
     "**/dist/**",
     "**/coverage/**",
+    "**/reports/**",
     "**/next-env.d.ts",
     "docs/**",
     "infra/**",
@@ -28,7 +29,13 @@ export default defineConfig([
     },
   },
   {
-    files: ["apps/api/**/*.ts", "packages/**/*.ts", "scripts/**/*.mjs"],
+    files: [
+      "apps/api/**/*.ts",
+      "packages/**/*.ts",
+      "scripts/**/*.mjs",
+      "tests/**/*.ts",
+      "vitest.config.ts",
+    ],
     languageOptions: {
       globals: {
         ...globals.node,

@@ -2,6 +2,7 @@ node_modules/
 .next/
 dist/
 coverage/
+reports/
 package-lock.json
 
 # Private process documents are maintained outside the public repository.

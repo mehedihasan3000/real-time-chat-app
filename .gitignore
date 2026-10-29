@@ -5,6 +5,7 @@ out/
 dist/
 build/
 coverage/
+reports/
 .turbo/
 .cache/
 *.tsbuildinfo
