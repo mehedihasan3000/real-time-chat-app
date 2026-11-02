@@ -1,3 +1,9 @@
+import type { MessageKey } from "@/src/i18n/catalog";
+
+/**
+ * Synthetic sample records. Times are stored as UTC instants and formatted
+ * only at render time for the selected locale and disclosed display timezone.
+ */
 export const sampleConversation = {
   id: "sample-conversation",
   participant: {
@@ -8,64 +14,98 @@ export const sampleConversation = {
   messages: [
     {
       id: "sample-message-1",
-      author: "Nusrat Jahan",
-      time: "09:41",
-      body: "This is a synthetic sample message. It previews the conversation layout without using real content.",
+      authorId: "preview-nusrat",
+      authorName: "Nusrat Jahan",
+      sentAt: "2026-10-31T09:41:00.000Z",
+      bodyKey: "sample.call.message1",
+      outgoing: false,
     },
     {
       id: "sample-message-2",
-      author: "Sample User",
-      time: "09:42",
-      body: "The composer below is a preview. Sending, delivery, receipts, and encryption are not implemented yet.",
+      authorId: "preview-self",
+      authorName: "Sample User",
+      sentAt: "2026-10-31T09:42:00.000Z",
+      bodyKey: "sample.call.message2",
+      outgoing: true,
     },
     {
       id: "sample-message-3",
-      author: "Nusrat Jahan",
-      time: "09:43",
-      body: "Loading, empty, error, and disconnected states are documented in the UI state gallery.",
+      authorId: "preview-nusrat",
+      authorName: "Nusrat Jahan",
+      sentAt: "2026-10-31T09:43:00.000Z",
+      bodyKey: "sample.call.message3",
+      outgoing: false,
     },
   ],
-} as const;
+} as const satisfies {
+  id: string;
+  participant: { userId: string; name: string; username: string };
+  messages: ReadonlyArray<{
+    id: string;
+    authorId: string;
+    authorName: string;
+    sentAt: string;
+    bodyKey: MessageKey;
+    outgoing: boolean;
+  }>;
+};
 
 export const sampleSelf = {
   userId: "preview-self",
   name: "Sample User",
   username: "sample_user",
-  bio: "Synthetic profile used to preview the signed-in profile layout.",
-  locale: "English (provisional)",
-  timezone: "Not set",
+  bioKey: "sample.call.selfBio",
 } as const;
 
 export const sampleProfile = {
   userId: "preview-nusrat",
   name: "Nusrat Jahan",
   username: "nusrat_j",
-  bio: "Synthetic profile used to preview the public profile layout.",
-  locale: "English (provisional)",
-  timezone: "Not set",
+  bioKey: "sample.call.profileBio",
 } as const;
 
-export const sampleCalls = [
+export type SampleCall = {
+  id: string;
+  userId: string;
+  name: string;
+  username: string;
+  kindKey: MessageKey;
+  directionKey: MessageKey;
+  startedAt: string;
+  durationSeconds: number | null;
+  outcomeKey: MessageKey;
+  missed: boolean;
+};
+
+export const sampleCalls: ReadonlyArray<SampleCall> = [
   {
     id: "sample-call",
+    userId: "preview-nusrat",
     name: "Nusrat Jahan",
     username: "nusrat_j",
-    kind: "Video call",
-    direction: "Outgoing",
-    when: "Today, 09:35",
-    duration: "4 min 12 s",
-    outcome: "Completed (sample)",
+    kindKey: "sample.call.video",
+    directionKey: "sample.call.outgoing",
+    startedAt: "2026-10-31T09:35:00.000Z",
+    durationSeconds: 252,
+    outcomeKey: "sample.call.completed",
+    missed: false,
   },
   {
     id: "sample-call-missed",
+    userId: "preview-nusrat",
     name: "Nusrat Jahan",
     username: "nusrat_j",
-    kind: "Audio call",
-    direction: "Incoming",
-    when: "Yesterday, 18:10",
-    duration: "Not connected",
-    outcome: "Missed (sample)",
+    kindKey: "sample.call.audio",
+    directionKey: "sample.call.incoming",
+    startedAt: "2026-10-30T18:10:00.000Z",
+    durationSeconds: null,
+    outcomeKey: "sample.call.missed",
+    missed: true,
   },
-] as const;
+];
 
-export const sampleCall = sampleCalls[0];
+export const sampleCall = sampleCalls[0] as SampleCall;
+
+export function findSampleCall(callId: string): SampleCall | undefined {
+  return sampleCalls.find((call) => call.id === callId);
+}

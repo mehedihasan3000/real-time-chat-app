@@ -8,6 +8,48 @@
 
 export const contractsVersion = "0.1.0";
 
+/**
+ * The approved interface languages. Locale persistence is a profile preference
+ * under DEC-023; the web preview currently stores only the non-sensitive
+ * interface choice in browser localStorage.
+ */
+export const supportedLocales = ["en", "bn"] as const;
+
+export type Locale = (typeof supportedLocales)[number];
+
+export const defaultLocale: Locale = "en";
+
+export function isLocale(value: unknown): value is Locale {
+  return typeof value === "string" && (supportedLocales as readonly string[]).includes(value);
+}
+
+/**
+ * Stable client-facing error codes from DEC-023 §8.3. The full error envelope
+ * and its HTTP status mapping remain release-gated; clients must branch on
+ * these codes and never display raw provider or database text.
+ */
+export const errorCodes = [
+  "INVALID_REQUEST",
+  "INVALID_CURSOR",
+  "UNAUTHENTICATED",
+  "SESSION_REVOKED",
+  "FORBIDDEN",
+  "NOT_FOUND",
+  "IDEMPOTENCY_CONFLICT",
+  "PAYLOAD_TOO_LARGE",
+  "RATE_LIMITED",
+  "UNSUPPORTED_SCHEMA_VERSION",
+  "CLIENT_UPGRADE_REQUIRED",
+  "TEMPORARILY_UNAVAILABLE",
+  "INTERNAL_ERROR",
+] as const;
+
+export type ErrorCode = (typeof errorCodes)[number];
+
+export function isErrorCode(value: unknown): value is ErrorCode {
+  return typeof value === "string" && (errorCodes as readonly string[]).includes(value);
+}
+
 export interface HealthResponse {
   status: "ok";
   service: "api";

@@ -1,0 +1,120 @@
+.nav {
+  min-width: 0;
+}
+
+.list {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  min-width: 0;
+}
+
+.link {
+  position: relative;
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  min-height: 2.75rem;
+  border-radius: var(--radius-md);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-weight: 650;
+  text-decoration: none;
+  transition:
+    background-color var(--transition-fast),
+    color var(--transition-fast);
+}
+
+.link:hover {
+  background: var(--color-surface-strong);
+  color: var(--color-text);
+}
+
+.link[aria-current="page"] {
+  background: var(--color-accent-soft);
+  color: var(--color-accent-strong);
+}
+
+.sidebar .link {
+  padding: 0.55rem var(--space-3);
+}
+
+.sidebar .icon {
+  display: inline-grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  background: transparent;
+  border-radius: 50%;
+  transition: background-color var(--transition-fast);
+}
+
+.sidebar .link[aria-current="page"] .icon {
+  background: var(--color-surface);
+  box-shadow: inset 0 0 0 1px var(--color-border);
+}
+
+.sidebar .label {
+  min-width: 0;
+}
+
+.bottom {
+  position: fixed;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 40;
+  padding: 0.35rem max(0.6rem, env(safe-area-inset-right))
+    calc(0.35rem + env(safe-area-inset-bottom)) max(0.6rem, env(safe-area-inset-left));
+  background: color-mix(in srgb, var(--color-bg-elevated) 94%, transparent);
+  border-top: 1px solid var(--color-border);
+  backdrop-filter: blur(1rem);
+}
+
+.bottom .list {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.15rem;
+  max-width: 34rem;
+  min-width: 0;
+  margin-inline: auto;
+}
+
+.bottom .link {
+  flex-direction: column;
+  gap: 0.15rem;
+  justify-content: center;
+  min-width: 0;
+  min-height: 3.6rem;
+  padding: 0.3rem 0.15rem;
+  border-radius: var(--radius-lg);
+  font-size: 0.7rem;
+  letter-spacing: 0.01em;
+}
+
+.bottom .link[aria-current="page"] {
+  background: var(--color-accent-soft);
+}
+
+.bottom .icon {
+  display: inline-grid;
+  place-items: center;
+  height: 1.6rem;
+}
+
+.bottom .label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (min-width: 64rem) {
+  .bottom {
+    display: none;
+  }
+}

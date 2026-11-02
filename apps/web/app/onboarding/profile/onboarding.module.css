@@ -1,0 +1,238 @@
+.shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+}
+
+.header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-5);
+  align-items: center;
+  justify-content: space-between;
+  width: min(100% - 1.5rem, 88rem);
+  margin-inline: auto;
+  padding-block: var(--space-3);
+}
+
+.headerActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.back {
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: center;
+  min-height: 2.75rem;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  font-weight: 650;
+  text-decoration: none;
+}
+
+.back:hover {
+  color: var(--color-text);
+}
+
+.main {
+  flex: 1;
+  width: min(100% - 1.5rem, 88rem);
+  margin-inline: auto;
+  padding-block: var(--space-3) var(--space-7);
+}
+
+.layout {
+  display: grid;
+  gap: var(--space-5);
+}
+
+.photoPanel {
+  position: relative;
+  min-height: 13rem;
+  overflow: hidden;
+  border-radius: var(--radius-xl);
+}
+
+.photo {
+  height: 100%;
+  border-radius: inherit;
+}
+
+.photoScrim {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    180deg,
+    rgb(33 19 27 / 8%) 0%,
+    rgb(33 19 27 / 28%) 45%,
+    rgb(33 19 27 / 84%) 100%
+  );
+}
+
+.photoContent {
+  position: absolute;
+  right: var(--space-5);
+  bottom: var(--space-5);
+  left: var(--space-5);
+  max-width: 30rem;
+  color: #fff6f1;
+}
+
+.photoBadge {
+  display: inline-block;
+  padding: 0.18rem 0.55rem;
+  background: rgb(255 246 241 / 14%);
+  border: 1px solid rgb(255 246 241 / 25%);
+  border-radius: var(--radius-pill);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.photoTitle {
+  margin-top: var(--space-2);
+  font-family: var(--font-display);
+  font-size: var(--text-2xl);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+.photoBody {
+  max-width: 36ch;
+  margin-top: var(--space-2);
+  color: rgb(255 246 241 / 84%);
+  font-size: var(--text-sm);
+  line-height: 1.55;
+}
+
+.formPanel {
+  min-width: 0;
+  padding: clamp(1.15rem, 3vw, 1.75rem);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-lg);
+}
+
+.formIntro {
+  display: block;
+}
+
+.eyebrow {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+  color: var(--color-accent);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.eyebrow::before {
+  width: 1.5rem;
+  height: 1px;
+  background: currentColor;
+  content: "";
+}
+
+.title {
+  margin-top: var(--space-2);
+  font-size: var(--text-3xl);
+  font-weight: 500;
+}
+
+.description {
+  max-width: 54ch;
+  margin-top: var(--space-2);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3) var(--space-5);
+  align-items: center;
+  justify-content: space-between;
+  width: min(100% - 1.5rem, 88rem);
+  margin-inline: auto;
+  padding-block: var(--space-5);
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-subtle);
+  font-size: var(--text-xs);
+}
+
+.footer nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+}
+
+.footer nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.25rem;
+}
+
+@media (min-width: 64rem) {
+  .layout {
+    grid-template-columns: minmax(0, 0.85fr) minmax(34rem, 1.15fr);
+    align-items: stretch;
+  }
+
+  .photoPanel {
+    min-height: 100%;
+    border-radius: 2rem;
+  }
+
+  .photoContent {
+    right: var(--space-7);
+    bottom: var(--space-7);
+    left: var(--space-7);
+  }
+
+  .formPanel {
+    padding: clamp(1.75rem, 3vw, 2.5rem);
+  }
+}
+
+@media (max-width: 40rem) {
+  .header {
+    width: min(100% - 1rem, 88rem);
+  }
+
+  .main {
+    width: min(100% - 1rem, 88rem);
+    padding-block: var(--space-2) var(--space-6);
+  }
+
+  .photoPanel {
+    height: 30vh;
+    min-height: 12rem;
+    max-height: 16rem;
+  }
+
+  .photoContent {
+    right: var(--space-4);
+    bottom: var(--space-4);
+    left: var(--space-4);
+  }
+
+  .photoTitle {
+    font-size: var(--text-xl);
+  }
+
+  .photoBody {
+    display: none;
+  }
+
+  .footer {
+    width: min(100% - 1rem, 88rem);
+  }
+}

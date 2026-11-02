@@ -1,0 +1,66 @@
+.controls {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.button {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  align-items: center;
+  justify-content: center;
+  min-width: 5.25rem;
+  min-height: 3.5rem;
+  padding: 0.45rem 0.7rem;
+  background: rgb(255 246 241 / 10%);
+  border: 1px solid rgb(255 246 241 / 22%);
+  border-radius: var(--radius-lg);
+  color: var(--color-stage-text);
+  font-size: 0.68rem;
+  font-weight: 650;
+  line-height: 1.2;
+  text-align: center;
+  backdrop-filter: blur(0.5rem);
+  transition:
+    background-color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.button:hover {
+  background: rgb(255 246 241 / 18%);
+  border-color: rgb(255 246 241 / 38%);
+}
+
+.danger {
+  background: rgb(179 38 30 / 34%);
+  border-color: rgb(255 155 149 / 38%);
+}
+
+.danger:hover {
+  background: rgb(179 38 30 / 48%);
+  border-color: rgb(255 155 149 / 55%);
+}
+
+.status {
+  max-width: 44rem;
+  padding: var(--space-2) var(--space-3);
+  background: rgb(12 6 9 / 58%);
+  border: 1px solid var(--color-stage-border);
+  border-radius: var(--radius-md);
+  color: var(--color-stage-text);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+@media (max-width: 30rem) {
+  .button {
+    flex: 1 1 5rem;
+    min-width: 0;
+  }
+}

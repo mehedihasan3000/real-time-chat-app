@@ -1,43 +1,48 @@
-import type { Metadata } from "next";
+"use client";
+
 import Link from "next/link";
+import { use } from "react";
 
 import { ActionLink } from "@/components/ui/action-link";
 import { GeneratedAvatar } from "@/components/ui/avatar";
+import { CallControls } from "@/components/ui/call-controls";
 import { PageHeader } from "@/components/ui/page-header";
 import { PlaceholderNotice } from "@/components/ui/placeholder-notice";
-import { PreviewAction } from "@/components/ui/preview-action";
+import { PhotoFrame } from "@/components/ui/photo-frame";
 import { StatePanel } from "@/components/ui/state-panel";
 import surface from "@/components/ui/surface.module.css";
-import { sampleCall, sampleCalls } from "@/lib/preview-data";
+import { findSampleCall, sampleCall, sampleConversation } from "@/lib/preview-data";
+import { DocumentTitle } from "@/src/i18n/document-title";
+import { useI18n } from "@/src/i18n/provider";
 
-export const metadata: Metadata = {
-  title: "Call preview",
-};
+import styles from "./call.module.css";
 
-export default async function CallPage({ params }: { params: Promise<{ callId: string }> }) {
-  const { callId } = await params;
-  const call = sampleCalls.find((entry) => entry.id === callId);
+export default function CallPage({ params }: { params: Promise<{ callId: string }> }) {
+  const { callId } = use(params);
+  const { t, formatDateTime, formatDuration } = useI18n();
+  const call = findSampleCall(callId);
 
   if (!call) {
     return (
       <div className="u-stack">
+        <DocumentTitle titleKey="documentTitle.call" />
         <PageHeader
-          eyebrow="Calling"
-          title="Call preview"
-          description="This route accepts a call ID, but the shell has no call data source."
+          eyebrow={t("call.eyebrow")}
+          title={t("call.title")}
+          description={t("call.description")}
           actions={
             <ActionLink href="/calls" variant="secondary">
-              Back to calls
+              {t("common.backToCalls")}
             </ActionLink>
           }
         />
         <StatePanel
           kind="empty"
-          title="No call data"
-          description={`No call with the ID “${callId}” exists in this static preview. Only the labelled sample call is available.`}
+          title={t("call.noCallTitle")}
+          description={t("call.noCallDescription", { id: callId })}
           action={
             <ActionLink href={`/calls/${sampleCall.id}`} variant="secondary">
-              Open the sample call
+              {t("call.openSample")}
             </ActionLink>
           }
         />
@@ -47,131 +52,200 @@ export default async function CallPage({ params }: { params: Promise<{ callId: s
 
   return (
     <div className="u-stack">
+      <DocumentTitle titleKey="documentTitle.call" />
       <PageHeader
-        eyebrow="Call preview"
+        eyebrow={t("call.eyebrow")}
         title={call.name}
-        description={`@${call.username} · Synthetic sample call record`}
+        description={t("call.descriptionWithUsername", { username: call.username })}
         actions={
           <ActionLink href="/calls" variant="secondary">
-            Back to calls
+            {t("common.backToCalls")}
           </ActionLink>
         }
       />
 
-      <PlaceholderNotice title="No media session exists" tone="warning">
-        <p>
-          This is a static record. No camera or microphone access is requested, no signaling or peer
-          connection is created, and the controls below only display preview notices.
-        </p>
+      <PlaceholderNotice title={t("call.noticeTitle")} tone="warning">
+        <p>{t("call.noticeBody")}</p>
       </PlaceholderNotice>
 
-      <section className={surface.card} aria-labelledby="call-summary-title">
-        <div className={surface.cardHeader}>
-          <div className={surface.avatarRow}>
-            <GeneratedAvatar
-              userId={`call-${call.id}`}
-              name={call.name}
-              size="md"
-              decorative={false}
-            />
-            <div>
-              <h2 className={surface.cardTitle} id="call-summary-title">
-                Call summary
-              </h2>
-              <p className={surface.cardDescription}>Sample lifecycle record</p>
+      <section className={styles.stage} aria-labelledby="call-stage-title">
+        <h2 className="visually-hidden" id="call-stage-title">
+          {t("call.stageTitle")}
+        </h2>
+        <PhotoFrame
+          src="/images/couple-silhouette.jpg"
+          alt=""
+          className={styles.stagePhoto}
+          sizes="(min-width: 64rem) 76rem, 100vw"
+          priority
+          position="center 32%"
+        >
+          <span className={styles.stageScrim} aria-hidden="true" />
+          <div className={styles.stageTop}>
+            <span className={styles.stageBadge}>{t("call.stageBadge")}</span>
+            <span className={styles.stageMeta}>
+              {t("call.stageMeta", {
+                kind: t(call.kindKey),
+                direction: t(call.directionKey),
+              })}
+            </span>
+          </div>
+
+          <div className={styles.stagePeople}>
+            <div className={styles.remoteFrame}>
+              <GeneratedAvatar
+                userId={call.userId}
+                name={call.name}
+                size="xl"
+                ring
+                decorative={false}
+              />
+              <p className={styles.remoteName}>{call.name}</p>
+              <p className={styles.remoteHandle}>
+                {t("call.sampleParticipant", { username: call.username })}
+              </p>
+            </div>
+
+            <div className={styles.selfFrame}>
+              <span className={styles.selfLabel}>{t("call.selfLabel")}</span>
+              <GeneratedAvatar
+                userId="preview-self"
+                name={t("common.sampleUser")}
+                size="lg"
+                decorative={false}
+              />
             </div>
           </div>
-          <span className={surface.badge}>{call.outcome}</span>
-        </div>
 
-        <dl className={surface.metaGrid}>
-          <div className={surface.metaItem}>
-            <dt className={surface.metaTerm}>Direction</dt>
-            <dd className={surface.metaValue}>{call.direction}</dd>
+          <div className={styles.stageBottom}>
+            <CallControls />
+            <p className={styles.stageHint} id="call-controls-hint">
+              {t("call.stageHint")}
+            </p>
           </div>
-          <div className={surface.metaItem}>
-            <dt className={surface.metaTerm}>Type</dt>
-            <dd className={surface.metaValue}>{call.kind}</dd>
-          </div>
-          <div className={surface.metaItem}>
-            <dt className={surface.metaTerm}>Started</dt>
-            <dd className={surface.metaValue}>{call.when}</dd>
-          </div>
-          <div className={surface.metaItem}>
-            <dt className={surface.metaTerm}>Duration</dt>
-            <dd className={surface.metaValue}>{call.duration}</dd>
-          </div>
-          <div className={surface.metaItem}>
-            <dt className={surface.metaTerm}>Outcome</dt>
-            <dd className={surface.metaValue}>{call.outcome}</dd>
-          </div>
-          <div className={surface.metaItem}>
-            <dt className={surface.metaTerm}>Media</dt>
-            <dd className={surface.metaValue}>No recording or raw media stored</dd>
-          </div>
-        </dl>
+        </PhotoFrame>
       </section>
 
-      <section className={surface.card} aria-labelledby="call-controls-title">
-        <h2 className={surface.cardTitle} id="call-controls-title">
-          Media controls preview
-        </h2>
-        <p className={surface.cardDescription}>
-          Controls are shown with their intended labels and states. They do not access devices or
-          change a call.
-        </p>
-        <div className={surface.actions} style={{ marginTop: "var(--space-4)" }}>
-          <PreviewAction
-            message="Microphone control is not implemented. No device permission was requested and no audio track exists."
-            describedBy="call-controls-hint"
-          >
-            Mute microphone (preview)
-          </PreviewAction>
-          <PreviewAction
-            message="Camera control is not implemented. No device permission was requested and no video track exists."
-            describedBy="call-controls-hint"
-          >
-            Turn camera off (preview)
-          </PreviewAction>
-          <PreviewAction
-            message="Ending a call is not implemented. There is no active call and no server request was made."
-            variant="danger"
-            describedBy="call-controls-hint"
-          >
-            End call (preview)
-          </PreviewAction>
-        </div>
-        <p className={surface.hint} id="call-controls-hint" style={{ marginTop: "var(--space-3)" }}>
-          The implemented UI will match the actual track state. A muted track or denied permission
-          is never shown as connected.
-        </p>
-      </section>
+      <div className={styles.layout}>
+        <section className={surface.card} aria-labelledby="call-summary-title">
+          <div className={surface.cardHeader}>
+            <div>
+              <h2 className={surface.cardTitle} id="call-summary-title">
+                {t("call.summaryTitle")}
+              </h2>
+              <p className={surface.cardDescription}>{t("call.summaryDescription")}</p>
+            </div>
+            <span className={surface.badge}>{t(call.outcomeKey)}</span>
+          </div>
+
+          <dl className={surface.metaGrid}>
+            <div className={surface.metaItem}>
+              <dt className={surface.metaTerm}>{t("call.direction")}</dt>
+              <dd className={surface.metaValue}>{t(call.directionKey)}</dd>
+            </div>
+            <div className={surface.metaItem}>
+              <dt className={surface.metaTerm}>{t("call.type")}</dt>
+              <dd className={surface.metaValue}>{t(call.kindKey)}</dd>
+            </div>
+            <div className={surface.metaItem}>
+              <dt className={surface.metaTerm}>{t("call.started")}</dt>
+              <dd className={surface.metaValue}>
+                {formatDateTime(call.startedAt, {
+                  dateStyle: "medium",
+                  timeStyle: "short",
+                })}
+              </dd>
+            </div>
+            <div className={surface.metaItem}>
+              <dt className={surface.metaTerm}>{t("call.duration")}</dt>
+              <dd className={surface.metaValue}>
+                {call.durationSeconds === null
+                  ? t("sample.call.notConnected")
+                  : formatDuration(call.durationSeconds)}
+              </dd>
+            </div>
+            <div className={surface.metaItem}>
+              <dt className={surface.metaTerm}>{t("call.outcome")}</dt>
+              <dd className={surface.metaValue}>{t(call.outcomeKey)}</dd>
+            </div>
+            <div className={surface.metaItem}>
+              <dt className={surface.metaTerm}>{t("call.media")}</dt>
+              <dd className={surface.metaValue}>{t("call.noMediaStored")}</dd>
+            </div>
+          </dl>
+        </section>
+
+        <aside className={styles.sideChat} aria-labelledby="side-chat-title">
+          <div className={styles.sideChatHeader}>
+            <h2 className={styles.sideChatTitle} id="side-chat-title">
+              {t("call.sideChatTitle")}
+            </h2>
+            <span className={surface.badge}>{t("common.sample")}</span>
+          </div>
+          <p className={styles.sideChatNote}>{t("call.sideChatNote")}</p>
+          <ol className={surface.messageList}>
+            {sampleConversation.messages.slice(0, 2).map((message) => (
+              <li className={surface.message} key={`call-${message.id}`}>
+                <div className={surface.messageHeader}>
+                  <span className={surface.messageAuthor}>
+                    {message.outgoing ? t("common.you") : message.authorName}
+                  </span>
+                  <span className={surface.messageTime}>
+                    {t("thread.messageTime", {
+                      time: formatDateTime(message.sentAt, {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      }),
+                    })}
+                  </span>
+                </div>
+                <p className={surface.messageBody}>{t(message.bodyKey)}</p>
+              </li>
+            ))}
+          </ol>
+          <div className={styles.sideComposer}>
+            <label className={surface.controlLabel} htmlFor="call-chat-draft">
+              {t("call.messageLabel")}
+            </label>
+            <textarea
+              className={surface.textarea}
+              id="call-chat-draft"
+              readOnly
+              placeholder={t("call.sideChatPlaceholder")}
+              aria-describedby="call-chat-hint"
+            />
+            <p className={surface.hint} id="call-chat-hint">
+              {t("call.sideChatHint")}
+            </p>
+          </div>
+        </aside>
+      </div>
 
       <section aria-labelledby="call-detail-states-title">
         <h2 className="u-section-title" id="call-detail-states-title">
-          Failure and disruption states
+          {t("call.statesTitle")}
         </h2>
         <div className="u-grid" style={{ marginTop: "var(--space-3)" }}>
           <StatePanel
             kind="error"
-            title="Microphone or camera permission denied"
-            description="The call fails with a permission-denied outcome, shows clear guidance, and releases any capture."
+            title={t("call.statePermissionTitle")}
+            description={t("call.statePermissionDescription")}
           />
           <StatePanel
             kind="disconnected"
-            title="Media path interrupted"
-            description="The local UI shows reconnecting and applies the approved reconnect-or-end policy instead of pretending the call is healthy."
+            title={t("call.stateMediaTitle")}
+            description={t("call.stateMediaDescription")}
           />
           <StatePanel
             kind="unsupported"
-            title="TURN relay unavailable"
-            description="On a relay-required network, missing or failed TURN credentials produce an explicit relay-unavailable failure."
-            action={<Link href="/states">View all UI states</Link>}
+            title={t("call.stateRelayTitle")}
+            description={t("call.stateRelayDescription")}
+            action={<Link href="/states">{t("common.viewAllUiStates")}</Link>}
           />
           <StatePanel
             kind="info"
-            title="Call lifecycle states"
-            description="Ringing, connecting, connected, reconnecting, and terminal states are distinct. Delayed events cannot revive a terminal call, and local media state is shown separately from server state."
+            title={t("call.stateLifecycleTitle")}
+            description={t("call.stateLifecycleDescription")}
           />
         </div>
       </section>

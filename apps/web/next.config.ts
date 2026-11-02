@@ -12,11 +12,11 @@ const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   agentRules: false,
+  allowedDevOrigins: ["192.168.0.115"],
   env: {
     NEXT_PUBLIC_API_ORIGIN: apiOrigin,
   },
 };
-
 export default nextConfig;
 
 function parseApiOrigin(value: string): string {

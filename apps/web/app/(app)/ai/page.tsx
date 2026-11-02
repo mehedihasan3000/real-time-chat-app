@@ -1,102 +1,138 @@
-import type { Metadata } from "next";
+"use client";
 
+import { ChatIcon, GlobeIcon, SparklesIcon } from "@/components/icons";
 import { ActionLink } from "@/components/ui/action-link";
 import { PageHeader } from "@/components/ui/page-header";
 import { PlaceholderNotice } from "@/components/ui/placeholder-notice";
 import { StatePanel } from "@/components/ui/state-panel";
 import surface from "@/components/ui/surface.module.css";
+import { DocumentTitle } from "@/src/i18n/document-title";
+import { useI18n } from "@/src/i18n/provider";
+import type { MessageKey } from "@/src/i18n/catalog";
 
-export const metadata: Metadata = {
-  title: "AI assistance",
-};
+import styles from "./ai.module.css";
 
-const features = [
+const features: ReadonlyArray<{
+  titleKey: MessageKey;
+  descriptionKey: MessageKey;
+  icon: typeof ChatIcon;
+}> = [
   {
-    title: "Smart replies",
-    description:
-      "Suggestions generated only from the selected message context. The user can review, edit, copy, or discard a suggestion; nothing is sent automatically.",
+    titleKey: "ai.featureSmartTitle",
+    descriptionKey: "ai.featureSmartDescription",
+    icon: ChatIcon,
   },
   {
-    title: "Message translation",
-    description:
-      "A selected message translated into an approved target language. The translation is labelled separately and the original stays unchanged.",
+    titleKey: "ai.featureTranslateTitle",
+    descriptionKey: "ai.featureTranslateDescription",
+    icon: GlobeIcon,
   },
   {
-    title: "Conversation summary",
-    description:
-      "A summary of a bounded, user-selected conversation range. It is displayed separately with a notice that it may omit or misstate information.",
+    titleKey: "ai.featureSummaryTitle",
+    descriptionKey: "ai.featureSummaryDescription",
+    icon: SparklesIcon,
   },
-] as const;
+];
 
 export default function AiPage() {
+  const { t } = useI18n();
+
   return (
     <div className="u-stack">
+      <DocumentTitle titleKey="documentTitle.ai" />
       <PageHeader
-        eyebrow="AI features"
-        title="AI assistance"
-        description="Informational placeholders for smart replies, translation, and summaries. Real-content AI is disabled."
+        eyebrow={t("ai.eyebrow")}
+        title={t("ai.title")}
+        description={t("ai.description")}
         actions={
           <ActionLink href="/settings#privacy" variant="secondary">
-            Privacy settings
+            {t("common.privacySettings")}
           </ActionLink>
         }
       />
 
-      <PlaceholderNotice title="Release-gated: real-content AI is disabled" tone="warning">
-        <p>
-          DEC-026 requires privacy and legal sign-off, per-action consent, disclosure, and
-          provider-integration evidence before real message content is processed. No consent is
-          recorded here, no content is sent, and no AI provider is called.
-        </p>
+      <PlaceholderNotice title={t("ai.noticeTitle")} tone="warning">
+        <p>{t("ai.noticeBody")}</p>
       </PlaceholderNotice>
 
       <StatePanel
         kind="unsupported"
-        title="AI assistance is unavailable"
-        description="The three AI features are MVP capabilities, but this shell exposes only their surfaces. Provider failure must never block authentication, history, or calls."
+        title={t("ai.unavailableTitle")}
+        description={t("ai.unavailableDescription")}
         action={
           <ActionLink href="/states" variant="secondary">
-            View all UI states
+            {t("common.viewAllUiStates")}
           </ActionLink>
         }
       />
 
       <section aria-labelledby="ai-features-title">
         <h2 className="u-section-title" id="ai-features-title">
-          Planned AI surfaces
+          {t("ai.featuresTitle")}
         </h2>
-        <div className="u-grid" style={{ marginTop: "var(--space-3)" }}>
-          {features.map((feature) => (
-            <article className={surface.card} key={feature.title}>
-              <div className={surface.cardHeader}>
-                <h3 className={surface.cardTitle}>{feature.title}</h3>
-                <span className={surface.badge}>Not available</span>
-              </div>
-              <p className={surface.cardDescription}>{feature.description}</p>
-            </article>
-          ))}
+        <div className={styles.featureGrid} style={{ marginTop: "var(--space-3)" }}>
+          {features.map((feature) => {
+            const Icon = feature.icon;
+
+            return (
+              <article className={styles.featureCard} key={feature.titleKey}>
+                <span className={styles.featureIcon} aria-hidden="true">
+                  <Icon size={22} />
+                </span>
+                <div className={styles.featureHeader}>
+                  <h3 className={styles.featureTitle}>{t(feature.titleKey)}</h3>
+                  <span className={surface.badge}>{t("common.notAvailable")}</span>
+                </div>
+                <p className={styles.featureBody}>{t(feature.descriptionKey)}</p>
+                <p className={styles.featureNote}>{t("common.noContentProcessed")}</p>
+              </article>
+            );
+          })}
+        </div>
+      </section>
+
+      <section className={styles.consent} aria-labelledby="ai-consent-title">
+        <div className={styles.consentCopy}>
+          <p className={styles.consentEyebrow}>{t("ai.consentEyebrow")}</p>
+          <h2 className={styles.consentTitle} id="ai-consent-title">
+            {t("ai.consentTitle")}
+          </h2>
+          <p className={styles.consentBody}>{t("ai.consentBody")}</p>
+          <ul className={styles.consentList}>
+            <li>{t("ai.consentList1")}</li>
+            <li>{t("ai.consentList2")}</li>
+            <li>{t("ai.consentList3")}</li>
+            <li>{t("ai.consentList4")}</li>
+          </ul>
+        </div>
+        <div className={styles.consentControl}>
+          <label className={styles.consentCheck} htmlFor="ai-consent-preview">
+            <input id="ai-consent-preview" type="checkbox" disabled />
+            <span>{t("ai.consentCheck")}</span>
+          </label>
+          <p className={styles.consentHint}>{t("ai.consentHint")}</p>
         </div>
       </section>
 
       <section aria-labelledby="ai-states-title">
         <h2 className="u-section-title" id="ai-states-title">
-          AI states represented in this shell
+          {t("ai.statesTitle")}
         </h2>
         <div className="u-grid" style={{ marginTop: "var(--space-3)" }}>
           <StatePanel
             kind="loading"
-            title="Request-scoped progress"
-            description="Each AI operation has its own loading and cancellation state. Cancellation prevents a later result from being inserted automatically."
+            title={t("ai.stateProgressTitle")}
+            description={t("ai.stateProgressDescription")}
           />
           <StatePanel
             kind="error"
-            title="Provider failure"
-            description="A safe failure message with a deliberate retry option. Original messages remain accessible and core chat is unaffected."
+            title={t("ai.stateProviderTitle")}
+            description={t("ai.stateProviderDescription")}
           />
           <StatePanel
             kind="unauthorized"
-            title="Consent or authorization missing"
-            description="No AI request is made without the current participant context and per-action consent for the selected content."
+            title={t("ai.stateConsentTitle")}
+            description={t("ai.stateConsentDescription")}
           />
         </div>
       </section>

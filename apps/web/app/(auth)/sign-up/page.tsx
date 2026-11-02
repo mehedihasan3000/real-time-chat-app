@@ -1,4 +1,5 @@
-import type { Metadata } from "next";
+"use client";
+
 import Link from "next/link";
 
 import { AuthCard } from "@/components/ui/auth-card";
@@ -6,67 +7,69 @@ import { PlaceholderNotice } from "@/components/ui/placeholder-notice";
 import { PreviewAction } from "@/components/ui/preview-action";
 import { PreviewForm } from "@/components/ui/preview-form";
 import surfaceStyles from "@/components/ui/surface.module.css";
-
-export const metadata: Metadata = {
-  title: "Create account",
-};
+import { DocumentTitle } from "@/src/i18n/document-title";
+import { useI18n } from "@/src/i18n/provider";
 
 export default function SignUpPage() {
+  const { t } = useI18n();
+
   return (
     <AuthCard
-      title="Create an account"
-      description="Preview the registration screen. No account is created and no email is sent."
+      title={t("auth.signUp.title")}
+      description={t("auth.signUp.description")}
       footer={
-        <p>
-          Already registered? <Link href="/sign-in">Sign in</Link>. Email verification is previewed
-          at <Link href="/verify-email">verify email</Link>.
-        </p>
+        <>
+          <p>
+            {t("auth.signUp.footerAlready")}{" "}
+            <Link href="/sign-in">{t("auth.signUp.footerSignIn")}</Link>.{" "}
+            {t("auth.signUp.footerVerifyPrefix")}{" "}
+            <Link href="/verify-email">{t("auth.signUp.footerVerify")}</Link>.
+          </p>
+          <p>
+            {t("auth.signUp.footerNext")}{" "}
+            <Link href="/onboarding/profile">{t("auth.signUp.footerProfileSetup")}</Link>.
+          </p>
+        </>
       }
     >
+      <DocumentTitle titleKey="documentTitle.signUp" />
       <div className="u-stack">
-        <PlaceholderNotice title="Registration is not implemented yet">
-          <p>
-            Account creation, the common/breached-password deny list, verification resend limits,
-            and anti-enumeration behavior land in P1-06. This form does not call an API.
-          </p>
+        <PlaceholderNotice title={t("auth.signUp.noticeTitle")}>
+          <p>{t("auth.signUp.noticeBody")}</p>
         </PlaceholderNotice>
 
         <PreviewForm
           fields={[
             {
               name: "email",
-              label: "Email",
+              label: t("common.email"),
               type: "email",
               autoComplete: "email",
               required: true,
               placeholder: "you@example.com",
-              hint: "A verification email will be required before sign-in in the implemented flow.",
+              hint: t("auth.signUp.emailHint"),
             },
             {
               name: "password",
-              label: "Password",
+              label: t("common.password"),
               type: "password",
               autoComplete: "new-password",
               required: true,
               minLength: 12,
               maxLength: 128,
-              hint: "Use 12–128 characters. The local deny list and breach checks are not implemented in this preview.",
+              hint: t("auth.signUp.passwordHint"),
             },
           ]}
-          submitLabel="Preview account creation"
-          statusMessage="Preview only: no account was created, no email was sent, and no password was stored."
+          submitLabel={t("auth.signUp.submit")}
+          statusMessage={t("auth.signUp.status")}
         />
 
         <div>
-          <PreviewAction
-            message="Google registration is not implemented. No OAuth request was made; account linking is part of P1-06."
-            describedBy="google-sign-up-hint"
-          >
-            Continue with Google (preview)
+          <PreviewAction message={t("auth.signUp.googleMessage")} describedBy="google-sign-up-hint">
+            {t("auth.signUp.google")}
           </PreviewAction>
           <p className={surfaceStyles.hint} id="google-sign-up-hint">
-            Google registration will require explicit account linking and a configured OAuth
-            redirect.
+            {t("auth.signUp.googleHint")}
           </p>
         </div>
       </div>

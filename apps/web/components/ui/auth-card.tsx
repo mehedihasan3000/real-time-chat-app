@@ -1,4 +1,8 @@
+"use client";
+
 import type { ReactNode } from "react";
+
+import { useI18n } from "@/src/i18n/provider";
 
 import styles from "./auth-card.module.css";
 
@@ -13,9 +17,11 @@ export function AuthCard({
   children: ReactNode;
   footer?: ReactNode;
 }) {
+  const { t } = useI18n();
+
   return (
     <section className={styles.card} aria-labelledby="auth-title">
-      <p className={styles.eyebrow}>Account access</p>
+      <p className={styles.eyebrow}>{t("auth.eyebrow")}</p>
       <h1 className={styles.title} id="auth-title">
         {title}
       </h1>

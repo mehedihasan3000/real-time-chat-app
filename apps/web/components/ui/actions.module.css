@@ -4,66 +4,78 @@
   justify-content: center;
   gap: var(--space-2);
   min-height: 2.75rem;
-  padding: 0.6rem 1rem;
+  padding: 0.65rem 1.1rem;
   border: 1px solid transparent;
   border-radius: var(--radius-pill);
   font-size: var(--text-sm);
-  font-weight: 650;
+  font-weight: 700;
   line-height: 1.2;
   text-align: center;
   text-decoration: none;
   transition:
     background-color var(--transition-fast),
     border-color var(--transition-fast),
-    color var(--transition-fast);
+    box-shadow var(--transition-fast),
+    color var(--transition-fast),
+    transform var(--transition-fast);
 }
 
 .action:hover {
   text-decoration: none;
+  transform: translateY(-1px);
+}
+
+.action:active {
+  transform: translateY(0);
 }
 
 .primary {
-  background: var(--color-accent-strong);
+  background: linear-gradient(135deg, var(--color-accent-strong), var(--color-plum));
+  box-shadow: 0 8px 22px rgb(169 47 80 / 20%);
   color: var(--color-on-accent);
 }
 
 .primary:hover {
-  background: var(--color-accent);
+  background: linear-gradient(135deg, var(--color-accent), var(--color-plum));
+  box-shadow: 0 10px 28px rgb(169 47 80 / 26%);
   color: var(--color-on-accent);
 }
 
 .secondary {
-  background: var(--color-surface-strong);
+  background: var(--color-surface);
   border-color: var(--color-border-strong);
   color: var(--color-text);
 }
 
 .secondary:hover {
+  background: var(--color-surface-rose);
   border-color: var(--color-accent);
   color: var(--color-text);
 }
 
 .ghost {
   background: transparent;
-  color: var(--color-accent);
+  color: var(--color-text-muted);
 }
 
 .ghost:hover {
-  background: var(--color-surface);
+  background: var(--color-surface-strong);
   color: var(--color-text);
 }
 
 .danger {
   background: var(--color-danger-surface);
-  border-color: var(--color-danger);
+  border-color: color-mix(in srgb, var(--color-danger) 40%, transparent);
   color: var(--color-danger);
 }
 
 .danger:hover {
-  background: var(--color-danger);
-  color: var(--color-bg);
+  background: color-mix(in srgb, var(--color-danger-surface) 65%, var(--color-danger));
+  color: var(--color-danger);
 }
 
-.action:disabled {
-  opacity: 0.55;
+@media (prefers-reduced-motion: reduce) {
+  .action:hover {
+    transform: none;
+  }
 }

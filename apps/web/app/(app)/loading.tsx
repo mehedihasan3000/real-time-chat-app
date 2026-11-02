@@ -1,11 +1,16 @@
+"use client";
+
 import { StatePanel } from "@/components/ui/state-panel";
+import { useI18n } from "@/src/i18n/provider";
 
 export default function AppLoading() {
+  const { t } = useI18n();
+
   return (
     <StatePanel
       kind="loading"
-      title="Loading surface"
-      description="The route is rendering. This static shell does not fetch session, message, call, or AI data."
+      title={t("status.appLoadingTitle")}
+      description={t("status.appLoadingDescription")}
       live
     />
   );

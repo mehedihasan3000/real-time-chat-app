@@ -1,5 +1,7 @@
-import type { Metadata } from "next";
+"use client";
+
 import Link from "next/link";
+import { use } from "react";
 
 import { ActionLink } from "@/components/ui/action-link";
 import { GeneratedAvatar } from "@/components/ui/avatar";
@@ -9,38 +11,36 @@ import { PreviewAction } from "@/components/ui/preview-action";
 import { StatePanel } from "@/components/ui/state-panel";
 import surface from "@/components/ui/surface.module.css";
 import { sampleConversation, sampleProfile } from "@/lib/preview-data";
+import { DocumentTitle } from "@/src/i18n/document-title";
+import { useI18n } from "@/src/i18n/provider";
 
-export const metadata: Metadata = {
-  title: "Public profile",
-};
+import styles from "../profile.module.css";
 
-export default async function PublicProfilePage({
-  params,
-}: {
-  params: Promise<{ username: string }>;
-}) {
-  const { username } = await params;
+export default function PublicProfilePage({ params }: { params: Promise<{ username: string }> }) {
+  const { username } = use(params);
+  const { t } = useI18n();
 
   if (username !== sampleProfile.username) {
     return (
       <div className="u-stack">
+        <DocumentTitle titleKey="documentTitle.publicProfile" />
         <PageHeader
-          eyebrow="Profile"
-          title="Profile preview"
-          description="This route accepts a username, but the shell has no profile data source."
+          eyebrow={t("publicProfile.eyebrow")}
+          title={t("publicProfile.title")}
+          description={t("publicProfile.description")}
           actions={
             <ActionLink href="/search" variant="secondary">
-              Back to search
+              {t("common.backToSearch")}
             </ActionLink>
           }
         />
         <StatePanel
           kind="empty"
-          title="No profile data"
-          description={`No profile for “${username}” exists in this static preview. Only the labelled sample profile is available.`}
+          title={t("publicProfile.noProfileTitle")}
+          description={t("publicProfile.noProfileDescription", { username })}
           action={
             <ActionLink href={`/profile/${sampleProfile.username}`} variant="secondary">
-              Open the sample profile
+              {t("publicProfile.openSample")}
             </ActionLink>
           }
         />
@@ -50,96 +50,124 @@ export default async function PublicProfilePage({
 
   return (
     <div className="u-stack">
+      <DocumentTitle titleKey="documentTitle.publicProfile" />
       <PageHeader
-        eyebrow="Public profile"
+        eyebrow={t("publicProfile.eyebrow")}
         title={sampleProfile.name}
-        description={`@${sampleProfile.username} · Synthetic sample profile`}
+        description={t("publicProfile.descriptionWithUsername", {
+          username: sampleProfile.username,
+        })}
         actions={
           <ActionLink href={`/conversations/${sampleConversation.id}`} variant="secondary">
-            Preview conversation
+            {t("common.previewConversation")}
           </ActionLink>
         }
       />
 
-      <PlaceholderNotice title="Profile and safety actions are placeholders">
-        <p>
-          Blocking and reporting land in P1-18. Profile loading, editing, and discovery land in
-          P1-17. The actions below only display a preview notice.
-        </p>
+      <PlaceholderNotice title={t("publicProfile.noticeTitle")}>
+        <p>{t("publicProfile.noticeBody")}</p>
       </PlaceholderNotice>
 
-      <section className={surface.card} aria-labelledby="public-profile-title">
-        <h2 className="visually-hidden" id="public-profile-title">
-          Sample public profile
-        </h2>
-        <div className={surface.profileCard}>
-          <GeneratedAvatar
-            userId={sampleProfile.userId}
-            name={sampleProfile.name}
-            size="lg"
-            decorative={false}
-          />
-          <div>
-            <p className={surface.profileName}>{sampleProfile.name}</p>
-            <p className={surface.profileHandle}>@{sampleProfile.username}</p>
-            <div className={surface.badgeRow} style={{ marginTop: "var(--space-2)" }}>
-              <span className={surface.badge}>Sample data</span>
-              <span className={surface.badge}>Generated avatar</span>
-            </div>
-            <p className={surface.cardDescription} style={{ marginTop: "var(--space-3)" }}>
-              {sampleProfile.bio}
-            </p>
+      <section className={styles.hero} aria-labelledby="public-profile-title">
+        <GeneratedAvatar
+          userId={sampleProfile.userId}
+          name={sampleProfile.name}
+          size="xl"
+          ring
+          decorative={false}
+        />
+        <div className={styles.heroCopy}>
+          <p className={styles.eyebrow}>{t("publicProfile.sampleEyebrow")}</p>
+          <h2 className={styles.name} id="public-profile-title">
+            {sampleProfile.name}
+          </h2>
+          <p className={styles.handle}>@{sampleProfile.username}</p>
+          <div className={surface.badgeRow}>
+            <span className={surface.badge}>{t("common.sampleData")}</span>
+            <span className={surface.badge}>{t("common.generatedAvatar")}</span>
           </div>
+          <p className={styles.bio}>{t(sampleProfile.bioKey)}</p>
         </div>
-
-        <hr className={surface.divider} />
-
-        <div className={surface.actions}>
-          <PreviewAction
-            message="Blocking is not implemented. No block was recorded and no request was sent; the blocking flow lands in P1-18."
-            variant="danger"
-            describedBy="block-action-hint"
-          >
-            Block user (preview)
-          </PreviewAction>
-          <PreviewAction
-            message="Reporting is not implemented. No report was created and no content was selected or sent; reporting lands in P1-18."
-            describedBy="report-action-hint"
-          >
-            Report user (preview)
-          </PreviewAction>
-        </div>
-        <p className={surface.hint} id="block-action-hint" style={{ marginTop: "var(--space-3)" }}>
-          The implemented block is silent to the blocked user. The blocker sees an explicit state,
-          and new conversation or call attempts receive a generic unavailable response.
-        </p>
-        <p className={surface.hint} id="report-action-hint" style={{ marginTop: "var(--space-2)" }}>
-          Reports will require an approved reason. Decrypted excerpts are optional, selected by the
-          reporter, previewed before consent, and never attached automatically.
-        </p>
       </section>
+
+      <div className={styles.layout}>
+        <section className={surface.card} aria-labelledby="safety-actions-title">
+          <div className={surface.cardHeader}>
+            <div>
+              <h2 className={surface.cardTitle} id="safety-actions-title">
+                {t("publicProfile.safetyTitle")}
+              </h2>
+              <p className={surface.cardDescription}>{t("publicProfile.safetyDescription")}</p>
+            </div>
+            <span className={surface.badge}>{t("common.preview")}</span>
+          </div>
+
+          <div className={surface.actions}>
+            <PreviewAction
+              message={t("publicProfile.blockMessage")}
+              variant="danger"
+              describedBy="block-action-hint"
+            >
+              {t("publicProfile.block")}
+            </PreviewAction>
+            <PreviewAction
+              message={t("publicProfile.reportMessage")}
+              describedBy="report-action-hint"
+            >
+              {t("publicProfile.report")}
+            </PreviewAction>
+          </div>
+          <p
+            className={surface.hint}
+            id="block-action-hint"
+            style={{ marginTop: "var(--space-3)" }}
+          >
+            {t("publicProfile.blockHint")}
+          </p>
+          <p
+            className={surface.hint}
+            id="report-action-hint"
+            style={{ marginTop: "var(--space-2)" }}
+          >
+            {t("publicProfile.reportHint")}
+          </p>
+        </section>
+
+        <aside className={styles.side} aria-labelledby="public-profile-context-title">
+          <h2 className={styles.sideTitle} id="public-profile-context-title">
+            {t("publicProfile.contextTitle")}
+          </h2>
+          <p className={styles.sideBody}>{t("publicProfile.contextBody")}</p>
+          <ul className={styles.sideList}>
+            <li>{t("publicProfile.contextList1")}</li>
+            <li>{t("publicProfile.contextList2")}</li>
+            <li>{t("publicProfile.contextList3")}</li>
+            <li>{t("publicProfile.contextList4")}</li>
+          </ul>
+        </aside>
+      </div>
 
       <section aria-labelledby="profile-safety-title">
         <h2 className="u-section-title" id="profile-safety-title">
-          Safety states
+          {t("publicProfile.statesTitle")}
         </h2>
         <div className="u-grid" style={{ marginTop: "var(--space-3)" }}>
           <StatePanel
             kind="info"
-            title="Blocked conversation"
-            description="The blocker sees “You blocked this user” and cannot send. The blocked user sees no block disclosure; outbound sends fail with a generic unavailable state."
+            title={t("publicProfile.stateBlockedTitle")}
+            description={t("publicProfile.stateBlockedDescription")}
           />
           <StatePanel
             kind="unauthorized"
-            title="Profile unavailable"
-            description="Blocked users are omitted from discovery and cannot create a new conversation with the blocker. The response is neutral."
+            title={t("publicProfile.stateUnavailableTitle")}
+            description={t("publicProfile.stateUnavailableDescription")}
           />
         </div>
       </section>
 
       <p className="u-muted u-small">
-        <Link href="/search">Back to search</Link> ·{" "}
-        <Link href="/settings#blocked-users">Manage blocked users</Link>
+        <Link href="/search">{t("common.backToSearch")}</Link> ·{" "}
+        <Link href="/settings#blocked-users">{t("common.manageBlockedUsers")}</Link>
       </p>
     </div>
   );

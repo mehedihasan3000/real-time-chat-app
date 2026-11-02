@@ -1,91 +1,50 @@
 .shell {
+  min-height: 100dvh;
+}
+
+.sidebar {
+  display: none;
+}
+
+.body {
   display: flex;
   flex-direction: column;
   min-height: 100dvh;
 }
 
-.header {
-  position: sticky;
-  top: 0;
-  z-index: 20;
-  background: var(--color-bg);
-  background: color-mix(in srgb, var(--color-bg) 92%, transparent);
-  border-bottom: 1px solid var(--color-border);
-  backdrop-filter: blur(0.75rem);
-}
-
-.headerInner {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-3) var(--space-5);
-  align-items: center;
-  justify-content: space-between;
-  width: min(100% - 2rem, var(--layout-max));
+.main {
+  flex: 1;
+  width: min(100% - 1.5rem, var(--layout-max));
   margin-inline: auto;
-  padding-block: var(--space-3);
+  padding-block: var(--space-5) calc(var(--bottom-nav-height) + var(--space-7));
 }
 
-.brand {
-  display: inline-flex;
-  gap: var(--space-3);
-  align-items: center;
-  color: var(--color-text);
-  font-weight: 750;
-  text-decoration: none;
-}
-
-.brand:hover {
-  color: var(--color-text);
-}
-
-.brandMark {
-  display: inline-grid;
-  place-items: center;
-  width: 2.25rem;
-  height: 2.25rem;
-  background: var(--color-accent-strong);
-  border-radius: 0.65rem;
-  color: var(--color-on-accent);
-  font-size: var(--text-sm);
-  letter-spacing: 0.02em;
-}
-
-.brandText {
-  font-size: var(--text-sm);
-}
-
-.connection {
+.mobileStatus {
   display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2) var(--space-3);
+  gap: var(--space-2);
   align-items: center;
-  padding: var(--space-2) max(1rem, calc((100% - var(--layout-max)) / 2));
+  padding: 0.4rem max(0.75rem, calc((100% - var(--layout-max)) / 2));
   background: var(--color-warning-surface);
-  border-bottom: 1px solid color-mix(in srgb, var(--color-warning) 35%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--color-warning) 25%, transparent);
   color: var(--color-text-muted);
   font-size: var(--text-xs);
+  line-height: 1.4;
 }
 
-.connection p {
-  flex: 1 1 18rem;
+.mobileStatus p {
+  min-width: 0;
 }
 
-.connection strong {
+.mobileStatus strong {
   color: var(--color-warning);
 }
 
-.dot {
-  width: 0.5rem;
-  height: 0.5rem;
+.connectionDot {
+  flex: 0 0 auto;
+  width: 0.45rem;
+  height: 0.45rem;
   background: var(--color-warning);
   border-radius: 50%;
-}
-
-.main {
-  flex: 1;
-  width: min(100% - 2rem, var(--layout-max));
-  margin-inline: auto;
-  padding-block: var(--space-6) var(--space-8);
 }
 
 .footer {
@@ -94,9 +53,9 @@
   gap: var(--space-3) var(--space-5);
   align-items: center;
   justify-content: space-between;
-  width: min(100% - 2rem, var(--layout-max));
+  width: min(100% - 1.5rem, var(--layout-max));
   margin-inline: auto;
-  padding-block: var(--space-5);
+  padding-block: var(--space-5) calc(var(--bottom-nav-height) + var(--space-6));
   border-top: 1px solid var(--color-border);
   color: var(--color-text-subtle);
   font-size: var(--text-xs);
@@ -108,17 +67,148 @@
   gap: var(--space-4);
 }
 
-@media (max-width: 30rem) {
-  .headerInner {
-    width: min(100% - 1.25rem, var(--layout-max));
+.footer nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 2.25rem;
+}
+
+@media (min-width: 64rem) {
+  .shell {
+    display: grid;
+    grid-template-columns: var(--sidebar-width) minmax(0, 1fr);
+  }
+
+  .sidebar {
+    position: sticky;
+    top: 0;
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6);
+    height: 100dvh;
+    padding: var(--space-5) var(--space-4);
+    overflow-y: auto;
+    background:
+      radial-gradient(18rem 16rem at 10% 0%, rgb(247 221 228 / 55%), transparent 70%),
+      var(--color-bg-elevated);
+    border-inline-end: 1px solid var(--color-border);
+  }
+
+  .home {
+    display: flex;
+    gap: var(--space-3);
+    align-items: center;
+    padding: var(--space-2);
+    border-radius: var(--radius-md);
+    color: var(--color-text);
+    text-decoration: none;
+  }
+
+  .home:hover {
+    background: var(--color-surface);
+    color: var(--color-text);
+  }
+
+  .homeMark {
+    display: inline-grid;
+    flex: 0 0 auto;
+    place-items: center;
+    width: 2.5rem;
+    height: 2.5rem;
+    background: var(--color-accent-soft);
+    border: 1px solid var(--color-border);
+    border-radius: 50%;
+    color: var(--color-accent);
+  }
+
+  .homeCopy {
+    display: grid;
+    gap: 0.05rem;
+    min-width: 0;
+  }
+
+  .homeTitle {
+    font-family: var(--font-display);
+    font-size: var(--text-lg);
+    font-weight: 550;
+    letter-spacing: -0.02em;
+    line-height: 1.15;
+  }
+
+  .homeSub {
+    color: var(--color-text-subtle);
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  .sidebarFooter {
+    display: grid;
+    gap: var(--space-3);
+    margin-top: auto;
+  }
+
+  .connection {
+    display: flex;
+    gap: var(--space-2);
+    align-items: start;
+    padding: var(--space-3);
+    background: var(--color-warning-surface);
+    border: 1px solid color-mix(in srgb, var(--color-warning) 22%, transparent);
+    border-radius: var(--radius-md);
+  }
+
+  .connection p {
+    display: grid;
+    gap: 0.15rem;
+    color: var(--color-text-muted);
+    font-size: var(--text-xs);
+    line-height: 1.45;
+  }
+
+  .connection strong {
+    color: var(--color-warning);
+    font-size: var(--text-sm);
+  }
+
+  .utility {
+    display: flex;
+    gap: var(--space-2);
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .utilityLink {
+    color: var(--color-text-muted);
+    font-size: var(--text-xs);
+    font-weight: 650;
+  }
+
+  .mobileStatus {
+    display: none;
+  }
+
+  .body {
+    grid-column: 2;
   }
 
   .main {
-    width: min(100% - 1.25rem, var(--layout-max));
-    padding-block: var(--space-5) var(--space-7);
+    width: min(100% - 4rem, 76rem);
+    padding-block: var(--space-7) var(--space-9);
   }
 
   .footer {
-    width: min(100% - 1.25rem, var(--layout-max));
+    width: min(100% - 4rem, 76rem);
+    padding-block: var(--space-5);
+  }
+}
+
+@media (min-width: 90rem) {
+  .main {
+    width: min(100% - 5rem, 80rem);
+  }
+
+  .footer {
+    width: min(100% - 5rem, 80rem);
   }
 }
