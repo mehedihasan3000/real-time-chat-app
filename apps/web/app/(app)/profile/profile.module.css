@@ -1,0 +1,128 @@
+.hero {
+  display: grid;
+  gap: var(--space-5);
+  align-items: center;
+  padding: clamp(1.5rem, 4vw, 2.5rem);
+  background:
+    radial-gradient(28rem 20rem at 100% 0%, rgb(247 221 228 / 80%), transparent 72%),
+    var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.heroCopy {
+  min-width: 0;
+}
+
+.eyebrow {
+  color: var(--color-accent);
+  font-size: var(--text-xs);
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.name {
+  margin-top: var(--space-1);
+  font-size: var(--text-3xl);
+  font-weight: 500;
+}
+
+.handle {
+  margin-top: var(--space-1);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.heroCopy .badgeRow {
+  margin-top: var(--space-2);
+}
+
+.bio {
+  max-width: 52ch;
+  margin-top: var(--space-3);
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.heroActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+.layout {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.side {
+  display: grid;
+  gap: var(--space-3);
+  align-content: start;
+  padding: var(--space-5);
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+}
+
+.sideTitle {
+  font-family: var(--font-display);
+  font-size: var(--text-xl);
+  font-weight: 550;
+  letter-spacing: -0.02em;
+}
+
+.sideBody {
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+}
+
+.sideList {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  color: var(--color-text-muted);
+  font-size: var(--text-sm);
+  list-style: none;
+}
+
+.sideList li {
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.sideList li::before {
+  width: 0.35rem;
+  height: 0.35rem;
+  background: var(--color-gold);
+  border-radius: 50%;
+  content: "";
+}
+
+.sideNote {
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+  color: var(--color-text-subtle);
+  font-size: var(--text-xs);
+  line-height: 1.55;
+}
+
+@media (min-width: 64rem) {
+  .layout {
+    grid-template-columns: minmax(0, 1.4fr) minmax(18rem, 0.6fr);
+    align-items: start;
+  }
+}
+
+@media (max-width: 40rem) {
+  .hero {
+    grid-template-columns: minmax(0, 1fr);
+    justify-items: start;
+  }
+}

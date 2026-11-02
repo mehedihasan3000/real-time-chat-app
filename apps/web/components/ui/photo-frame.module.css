@@ -1,0 +1,35 @@
+.frame {
+  position: relative;
+  overflow: hidden;
+  background: var(--color-surface-strong);
+  border-radius: var(--radius-xl);
+}
+
+.image {
+  object-fit: cover;
+}
+
+.strip {
+  position: relative;
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-sm);
+}
+
+.stripImage {
+  object-fit: cover;
+  object-position: center bottom;
+}
+
+.strip::after {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    color-mix(in srgb, var(--color-bg) 45%, transparent),
+    transparent 18%,
+    transparent 82%,
+    color-mix(in srgb, var(--color-bg) 45%, transparent)
+  );
+  content: "";
+  pointer-events: none;
+}

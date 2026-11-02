@@ -3,6 +3,8 @@
 import Link from "next/link";
 
 import { ActionButton } from "@/components/ui/action-button";
+import { DocumentTitle } from "@/src/i18n/document-title";
+import { useI18n } from "@/src/i18n/provider";
 import styles from "./status.module.css";
 
 export default function ErrorPage({
@@ -12,28 +14,28 @@ export default function ErrorPage({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const { t } = useI18n();
+
   return (
     <main id="main-content" className={styles.shell} tabIndex={-1}>
+      <DocumentTitle titleKey="documentTitle.error" />
       <section className={styles.card} role="alert" aria-labelledby="error-title">
-        <p className={styles.eyebrow}>Error</p>
+        <p className={styles.eyebrow}>{t("status.errorEyebrow")}</p>
         <h1 className={styles.title} id="error-title">
-          Something went wrong
+          {t("status.errorTitle")}
         </h1>
-        <p className={styles.description}>
-          The shell could not render this route. No message, call, or AI request is implied by this
-          error. Try again, or return to a known surface.
-        </p>
+        <p className={styles.description}>{t("status.errorDescription")}</p>
         {error.digest ? (
           <p className={styles.reference}>
-            Safe reference: <code>{error.digest}</code>
+            {t("status.safeReference")} <code>{error.digest}</code>
           </p>
         ) : null}
         <div className={styles.actions}>
           <ActionButton variant="primary" onClick={reset}>
-            Try again
+            {t("common.tryAgain")}
           </ActionButton>
-          <Link href="/">Return home</Link>
-          <Link href="/states">View UI states</Link>
+          <Link href="/">{t("common.returnHome")}</Link>
+          <Link href="/states">{t("common.viewUiStates")}</Link>
         </div>
       </section>
     </main>

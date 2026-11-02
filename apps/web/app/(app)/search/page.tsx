@@ -1,6 +1,8 @@
-import type { Metadata } from "next";
+"use client";
+
 import Link from "next/link";
 
+import { SearchIcon } from "@/components/icons";
 import { ActionLink } from "@/components/ui/action-link";
 import { GeneratedAvatar } from "@/components/ui/avatar";
 import { PageHeader } from "@/components/ui/page-header";
@@ -9,110 +11,102 @@ import { PreviewForm } from "@/components/ui/preview-form";
 import { StatePanel } from "@/components/ui/state-panel";
 import surface from "@/components/ui/surface.module.css";
 import { sampleProfile } from "@/lib/preview-data";
+import { DocumentTitle } from "@/src/i18n/document-title";
+import { useI18n } from "@/src/i18n/provider";
 
-export const metadata: Metadata = {
-  title: "Search",
-};
+import styles from "./search.module.css";
 
 export default function SearchPage() {
+  const { t } = useI18n();
+
   return (
     <div className="u-stack">
+      <DocumentTitle titleKey="documentTitle.search" />
       <PageHeader
-        eyebrow="Discovery"
-        title="Find people"
-        description="Discovery is authenticated and limited to an exact, normalized username. Prefix, email, and phone search are intentionally unsupported."
+        eyebrow={t("search.eyebrow")}
+        title={t("search.title")}
+        description={t("search.description")}
         actions={
           <ActionLink href="/conversations" variant="secondary">
-            Back to conversations
+            {t("common.backToChats")}
           </ActionLink>
         }
       />
 
-      <PlaceholderNotice title="Search is not implemented yet">
-        <p>
-          Exact-username lookup, neutral no-result behavior, and blocked-user omission land in
-          P1-17. This form does not call an API and does not disclose whether an account exists.
-        </p>
+      <PlaceholderNotice title={t("search.noticeTitle")}>
+        <p>{t("search.noticeBody")}</p>
       </PlaceholderNotice>
 
-      <section className={surface.card} aria-labelledby="search-form-title">
-        <h2 className={surface.cardTitle} id="search-form-title">
-          Exact username search
+      <section className={styles.searchCard} aria-labelledby="search-form-title">
+        <span className={styles.searchIcon} aria-hidden="true">
+          <SearchIcon size={26} />
+        </span>
+        <h2 className={styles.searchTitle} id="search-form-title">
+          {t("search.formTitle")}
         </h2>
-        <p className={surface.cardDescription}>
-          Usernames are 3–24 ASCII characters, start with a letter, and contain only lowercase
-          letters, digits, and underscores.
-        </p>
-        <div style={{ marginTop: "var(--space-4)" }}>
+        <p className={styles.searchBody}>{t("search.formBody")}</p>
+        <div className={styles.formWrap}>
           <PreviewForm
             fields={[
               {
                 name: "username",
-                label: "Username",
+                label: t("search.usernameLabel"),
                 type: "search",
                 autoComplete: "off",
                 required: true,
                 minLength: 3,
                 maxLength: 24,
-                placeholder: "exact_username",
-                hint: "The implemented search returns only userId, username, display name, and avatar reference.",
+                placeholder: t("search.usernamePlaceholder"),
+                hint: t("search.usernameHint"),
               },
             ]}
-            submitLabel="Preview search"
-            statusMessage="Preview only: no search request was made. Exact-username discovery is implemented in P1-17."
+            submitLabel={t("search.submit")}
+            statusMessage={t("search.status")}
           />
         </div>
+        <p className={styles.searchNote}>{t("search.note")}</p>
       </section>
 
       <section className={surface.card} aria-labelledby="sample-result-title">
         <div className={surface.cardHeader}>
           <div>
             <h2 className={surface.cardTitle} id="sample-result-title">
-              Sample result layout
+              {t("search.sampleTitle")}
             </h2>
-            <p className={surface.cardDescription}>
-              Synthetic result. It is not returned by a search and does not represent a real
-              account.
-            </p>
+            <p className={surface.cardDescription}>{t("search.sampleDescription")}</p>
           </div>
-          <span className={surface.badge}>Static preview</span>
+          <span className={surface.badge}>{t("common.sample")}</span>
         </div>
-        <ul className={surface.rowList}>
-          <li className={surface.row}>
-            <div className={surface.rowMain}>
-              <GeneratedAvatar userId={sampleProfile.userId} name={sampleProfile.name} size="sm" />
-              <div>
-                <p className={surface.rowTitle}>{sampleProfile.name}</p>
-                <p className={surface.rowMeta}>@{sampleProfile.username}</p>
-              </div>
-            </div>
-            <Link className={surface.rowAction} href={`/profile/${sampleProfile.username}`}>
-              View sample profile
-            </Link>
-          </li>
-        </ul>
+        <Link className={styles.resultRow} href={`/profile/${sampleProfile.username}`}>
+          <GeneratedAvatar userId={sampleProfile.userId} name={sampleProfile.name} size="md" />
+          <span className={styles.resultCopy}>
+            <span className={styles.resultName}>{sampleProfile.name}</span>
+            <span className={styles.resultHandle}>@{sampleProfile.username}</span>
+          </span>
+          <span className={styles.resultAction}>{t("search.viewSampleProfile")}</span>
+        </Link>
       </section>
 
       <section aria-labelledby="search-states-title">
         <h2 className="u-section-title" id="search-states-title">
-          Search states
+          {t("search.statesTitle")}
         </h2>
         <div className="u-grid" style={{ marginTop: "var(--space-3)" }}>
           <StatePanel
             kind="empty"
-            title="No exact match"
-            description="The implemented response is neutral and does not reveal whether an account exists."
+            title={t("search.stateNoMatchTitle")}
+            description={t("search.stateNoMatchDescription")}
           />
           <StatePanel
             kind="unsupported"
-            title="Unsupported search modes"
-            description="Prefix search, email lookup, phone lookup, and “people you may know” are not part of v1.0."
+            title={t("search.stateUnsupportedTitle")}
+            description={t("search.stateUnsupportedDescription")}
           />
           <StatePanel
             kind="unauthorized"
-            title="Sign-in required"
-            description="Discovery is authenticated. This static preview is visible, but the implemented route will require a session."
-            action={<Link href="/sign-in">Open sign-in</Link>}
+            title={t("search.stateSignInTitle")}
+            description={t("search.stateSignInDescription")}
+            action={<Link href="/sign-in">{t("common.openSignIn")}</Link>}
           />
         </div>
       </section>

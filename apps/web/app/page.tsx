@@ -1,198 +1,298 @@
+"use client";
+
 import Link from "next/link";
 
+import { ArrowRightIcon, HeartIcon } from "@/components/icons";
+import { LocaleToggle } from "@/components/i18n/locale-toggle";
+import { ThemeToggle } from "@/components/theme/theme-toggle";
 import { ActionLink } from "@/components/ui/action-link";
+import { HeartDivider } from "@/components/ui/motif";
+import { PhotoFrame, PhotoStrip } from "@/components/ui/photo-frame";
+import { DocumentTitle } from "@/src/i18n/document-title";
+import { useI18n } from "@/src/i18n/provider";
+import type { MessageKey } from "@/src/i18n/catalog";
 
 import styles from "./page.module.css";
 
-const surfaces = [
+type Surface = {
+  titleKey: MessageKey;
+  descriptionKey: MessageKey;
+  href: string;
+  linkKey: MessageKey;
+  extra?: ReadonlyArray<{ href: string; labelKey: MessageKey }>;
+};
+
+type Group = {
+  id: string;
+  eyebrowKey: MessageKey;
+  titleKey: MessageKey;
+  descriptionKey: MessageKey;
+  surfaces: ReadonlyArray<Surface>;
+};
+
+const groups: ReadonlyArray<Group> = [
   {
-    title: "Authentication",
-    description:
-      "Sign-in, registration, email verification, forgot-password, and reset-password screens.",
-    href: "/sign-in",
-    linkLabel: "Open sign-in",
-    extra: [
-      { href: "/sign-up", label: "Create account" },
-      { href: "/verify-email", label: "Verify email" },
-      { href: "/forgot-password", label: "Forgot password" },
-      { href: "/reset-password", label: "Reset password" },
+    id: "start",
+    eyebrowKey: "home.group.start.eyebrow",
+    titleKey: "home.group.start.title",
+    descriptionKey: "home.group.start.description",
+    surfaces: [
+      {
+        titleKey: "home.group.start.signIn.title",
+        descriptionKey: "home.group.start.signIn.description",
+        href: "/sign-in",
+        linkKey: "home.group.start.signIn.link",
+        extra: [
+          { href: "/sign-up", labelKey: "home.group.start.signIn.extra.signUp" },
+          { href: "/verify-email", labelKey: "home.group.start.signIn.extra.verifyEmail" },
+          { href: "/forgot-password", labelKey: "home.group.start.signIn.extra.forgotPassword" },
+          { href: "/reset-password", labelKey: "home.group.start.signIn.extra.resetPassword" },
+        ],
+      },
+      {
+        titleKey: "home.group.start.profileSetup.title",
+        descriptionKey: "home.group.start.profileSetup.description",
+        href: "/onboarding/profile",
+        linkKey: "home.group.start.profileSetup.link",
+        extra: [{ href: "/profile", labelKey: "home.group.start.profileSetup.extra.profile" }],
+      },
     ],
   },
   {
-    title: "Conversations",
-    description:
-      "Conversation list and thread layout with empty, loading, error, and disconnected states.",
-    href: "/conversations",
-    linkLabel: "Open conversations",
+    id: "everyday",
+    eyebrowKey: "home.group.everyday.eyebrow",
+    titleKey: "home.group.everyday.title",
+    descriptionKey: "home.group.everyday.description",
+    surfaces: [
+      {
+        titleKey: "home.group.everyday.chats.title",
+        descriptionKey: "home.group.everyday.chats.description",
+        href: "/conversations",
+        linkKey: "home.group.everyday.chats.link",
+        extra: [
+          {
+            href: "/conversations/sample-conversation",
+            labelKey: "home.group.everyday.chats.extra.thread",
+          },
+        ],
+      },
+      {
+        titleKey: "home.group.everyday.calls.title",
+        descriptionKey: "home.group.everyday.calls.description",
+        href: "/calls",
+        linkKey: "home.group.everyday.calls.link",
+        extra: [{ href: "/calls/sample-call", labelKey: "home.group.everyday.calls.extra.call" }],
+      },
+      {
+        titleKey: "home.group.everyday.search.title",
+        descriptionKey: "home.group.everyday.search.description",
+        href: "/search",
+        linkKey: "home.group.everyday.search.link",
+      },
+      {
+        titleKey: "home.group.everyday.profile.title",
+        descriptionKey: "home.group.everyday.profile.description",
+        href: "/profile",
+        linkKey: "home.group.everyday.profile.link",
+        extra: [
+          {
+            href: "/profile/nusrat_j",
+            labelKey: "home.group.everyday.profile.extra.publicProfile",
+          },
+        ],
+      },
+    ],
   },
   {
-    title: "Search",
-    description: "Exact-username discovery surface with neutral empty and unsupported states.",
-    href: "/search",
-    linkLabel: "Open search",
+    id: "trust",
+    eyebrowKey: "home.group.trust.eyebrow",
+    titleKey: "home.group.trust.title",
+    descriptionKey: "home.group.trust.description",
+    surfaces: [
+      {
+        titleKey: "home.group.trust.settings.title",
+        descriptionKey: "home.group.trust.settings.description",
+        href: "/settings",
+        linkKey: "home.group.trust.settings.link",
+      },
+      {
+        titleKey: "home.group.trust.ai.title",
+        descriptionKey: "home.group.trust.ai.description",
+        href: "/ai",
+        linkKey: "home.group.trust.ai.link",
+      },
+      {
+        titleKey: "home.group.trust.states.title",
+        descriptionKey: "home.group.trust.states.description",
+        href: "/states",
+        linkKey: "home.group.trust.states.link",
+      },
+    ],
   },
-  {
-    title: "Profile",
-    description: "Own profile and public profile views with a generated initials avatar.",
-    href: "/profile",
-    linkLabel: "Open profile",
-  },
-  {
-    title: "Calls",
-    description: "Call history, call detail, and media-control states for audio and video calls.",
-    href: "/calls",
-    linkLabel: "Open calls",
-  },
-  {
-    title: "AI assistance",
-    description:
-      "Release-gated AI surfaces with consent, unavailable, and provider-failure states.",
-    href: "/ai",
-    linkLabel: "Open AI",
-  },
-  {
-    title: "Settings",
-    description:
-      "Account, privacy, notifications, language, data, and session sections with placeholder controls.",
-    href: "/settings",
-    linkLabel: "Open settings",
-  },
-  {
-    title: "UI states",
-    description: "A static gallery of the shared loading, empty, error, and disconnected states.",
-    href: "/states",
-    linkLabel: "Open state gallery",
-  },
-] as const;
+];
 
 export default function Home() {
+  const { t } = useI18n();
+
   return (
     <div className={styles.shell}>
+      <DocumentTitle titleKey="documentTitle.home" />
       <header className={styles.header}>
-        <Link href="/" className={styles.brand} aria-label="Real-Time Chat and Calling home">
-          <span className={styles.brandMark} aria-hidden="true">
-            RC
+        <Link href="/" className={styles.home} aria-label={t("shell.homeAria")}>
+          <span className={styles.homeMark} aria-hidden="true">
+            <HeartIcon size={17} />
           </span>
-          <span>Real-Time Chat</span>
+          <span>{t("shell.homeTitle")}</span>
         </Link>
-        <nav className={styles.accountNav} aria-label="Account">
-          <Link href="/sign-in">Sign in</Link>
-          <Link href="/sign-up" className={styles.accountPrimary}>
-            Create account
+        <nav className={styles.headerNav} aria-label={t("nav.account")}>
+          <Link href="/sign-in">{t("common.signIn")}</Link>
+          <Link href="/sign-up" className={styles.headerPrimary}>
+            {t("common.createAccount")}
           </Link>
+          <LocaleToggle />
+          <ThemeToggle />
         </nav>
       </header>
 
       <main id="main-content" className={styles.main} tabIndex={-1}>
         <section className={styles.hero} aria-labelledby="hero-title">
           <div className={styles.heroCopy}>
-            <p className={styles.eyebrow}>UI shell preview</p>
+            <p className={styles.eyebrow}>{t("home.heroEyebrow")}</p>
             <h1 className={styles.title} id="hero-title">
-              One-to-one chat and calling, built in the open.
+              {t("home.heroTitle")}
             </h1>
-            <p className={styles.lead}>
-              This repository now has a navigable shell for every MVP surface. Authentication,
-              messaging, calls, AI, and persistence are still placeholders, and each screen says so.
-            </p>
-            <div className={styles.actions}>
-              <ActionLink href="/conversations">Preview the app</ActionLink>
-              <ActionLink href="/sign-up" variant="secondary">
-                Create an account
+            <p className={styles.lead}>{t("home.heroLead")}</p>
+            <div className={styles.heroActions}>
+              <ActionLink href="/conversations">{t("common.openChats")}</ActionLink>
+              <ActionLink href="/sign-in" variant="secondary">
+                {t("common.previewSignIn")}
               </ActionLink>
             </div>
+            <ul className={styles.heroFacts} aria-label={t("home.heroFactsAria")}>
+              <li>{t("common.staticRoutes")}</li>
+              <li>{t("common.noLiveServices")}</li>
+              <li>{t("common.lightAndDarkThemes")}</li>
+            </ul>
           </div>
 
-          <aside className={styles.previewCard} aria-labelledby="build-status-title">
-            <p className={styles.previewLabel}>Current build</p>
-            <p className={styles.previewStatus} id="build-status-title">
-              <span className={styles.statusDot} aria-hidden="true" />
-              Static shell — not connected
-            </p>
-            <ul className={styles.previewList}>
-              <li>Routes, navigation, and shared UI states are present.</li>
-              <li>Keyboard focus, labels, and a skip link are in place.</li>
-              <li>No session, message, call, or AI request is made.</li>
-            </ul>
-            <p className={styles.previewNote}>
-              No security, capacity, or accessibility certification is claimed.
-            </p>
-          </aside>
+          <div className={styles.heroVisual}>
+            <PhotoFrame
+              src="/images/couple-silhouette.jpg"
+              alt={t("home.photoAlt")}
+              className={styles.heroPhoto}
+              sizes="(min-width: 64rem) 38vw, 100vw"
+              priority
+              position="center 42%"
+            >
+              <span className={styles.photoScrim} aria-hidden="true" />
+              <div className={styles.photoCaption}>
+                <span className={styles.photoLabel}>{t("common.suppliedPhotography")}</span>
+                <p>{t("common.localAssetNoLicence")}</p>
+              </div>
+            </PhotoFrame>
+
+            <aside className={styles.buildCard} aria-labelledby="build-status-title">
+              <p className={styles.buildLabel}>{t("home.buildLabel")}</p>
+              <p className={styles.buildStatus} id="build-status-title">
+                <span className={styles.statusDot} aria-hidden="true" />
+                {t("home.buildStatus")}
+              </p>
+              <ul className={styles.buildList}>
+                <li>{t("home.buildList1")}</li>
+                <li>{t("home.buildList2")}</li>
+                <li>{t("home.buildList3")}</li>
+              </ul>
+              <p className={styles.buildNote}>{t("home.buildNote")}</p>
+            </aside>
+          </div>
         </section>
 
-        <section aria-labelledby="surfaces-title">
+        <PhotoStrip className={styles.strip} />
+
+        <section className={styles.inventory} aria-labelledby="surfaces-title">
           <div className={styles.sectionHeader}>
             <div>
-              <p className={styles.eyebrow}>Route inventory</p>
+              <p className={styles.eyebrow}>{t("home.inventoryEyebrow")}</p>
               <h2 className={styles.sectionTitle} id="surfaces-title">
-                MVP surfaces
+                {t("home.inventoryTitle")}
               </h2>
             </div>
-            <p className={styles.sectionDescription}>
-              Every surface below is reachable from this page and from the primary navigation.
-            </p>
+            <p className={styles.sectionDescription}>{t("home.inventoryDescription")}</p>
           </div>
 
-          <div className={styles.grid}>
-            {surfaces.map((surface) => (
-              <article className={styles.surfaceCard} key={surface.href}>
-                <h3 className={styles.surfaceTitle}>{surface.title}</h3>
-                <p className={styles.surfaceDescription}>{surface.description}</p>
-                <div className={styles.surfaceLinks}>
-                  <Link href={surface.href}>{surface.linkLabel}</Link>
-                  {"extra" in surface
-                    ? surface.extra.map((link) => (
-                        <Link href={link.href} key={link.href}>
-                          {link.label}
-                        </Link>
-                      ))
-                    : null}
-                </div>
-              </article>
-            ))}
-          </div>
+          {groups.map((group) => (
+            <section className={styles.group} key={group.id} aria-labelledby={`${group.id}-title`}>
+              <div className={styles.groupHeader}>
+                <p className={styles.groupEyebrow}>{t(group.eyebrowKey)}</p>
+                <h3 className={styles.groupTitle} id={`${group.id}-title`}>
+                  {t(group.titleKey)}
+                </h3>
+                <p className={styles.groupDescription}>{t(group.descriptionKey)}</p>
+              </div>
+              <div className={styles.grid}>
+                {group.surfaces.map((surface) => (
+                  <article className={styles.surfaceCard} key={surface.href}>
+                    <h4 className={styles.surfaceTitle}>{t(surface.titleKey)}</h4>
+                    <p className={styles.surfaceDescription}>{t(surface.descriptionKey)}</p>
+                    <div className={styles.surfaceFooter}>
+                      <Link className={styles.surfaceLink} href={surface.href}>
+                        {t(surface.linkKey)}
+                        <ArrowRightIcon size={17} />
+                      </Link>
+                      {surface.extra ? (
+                        <div className={styles.extraLinks}>
+                          {surface.extra.map((link) => (
+                            <Link href={link.href} key={link.href}>
+                              {t(link.labelKey)}
+                            </Link>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  </article>
+                ))}
+              </div>
+            </section>
+          ))}
         </section>
 
-        <section className={styles.columns} aria-label="Implementation scope">
+        <HeartDivider className={styles.divider} />
+
+        <section className={styles.columns} aria-label={t("common.implementationScope")}>
           <div className={styles.scopePanel}>
-            <h2 className={styles.sectionTitle}>What this shell includes</h2>
+            <h2 className={styles.scopeTitle}>{t("home.includesTitle")}</h2>
             <ul className={styles.list}>
-              <li>Responsive layout with a skip link, visible focus, and semantic landmarks.</li>
-              <li>Primary navigation with a current-page indicator.</li>
-              <li>
-                Shared loading, empty, error, disconnected, unauthorized, and unsupported states.
-              </li>
-              <li>Generated initials avatars with no upload or external image request.</li>
-              <li>English placeholder copy; Bengali localization is tracked separately.</li>
+              <li>{t("common.includes1")}</li>
+              <li>{t("common.includes2")}</li>
+              <li>{t("common.includes3")}</li>
+              <li>{t("common.includes4")}</li>
+              <li>{t("common.includes5")}</li>
             </ul>
           </div>
           <div className={styles.scopePanel}>
-            <h2 className={styles.sectionTitle}>What is not implemented</h2>
+            <h2 className={styles.scopeTitle}>{t("home.excludesTitle")}</h2>
             <ul className={styles.list}>
-              <li>Registration, sign-in, sessions, email verification, and password reset.</li>
-              <li>Message sending, history, receipts, presence, typing, and unread state.</li>
-              <li>Audio/video calls, media permissions, TURN, and call signaling.</li>
-              <li>AI consent, prompts, summaries, replies, and translation.</li>
-              <li>Profiles, discovery, blocking, reporting, and persistence.</li>
+              <li>{t("common.excludes1")}</li>
+              <li>{t("common.excludes2")}</li>
+              <li>{t("common.excludes3")}</li>
+              <li>{t("common.excludes4")}</li>
+              <li>{t("common.excludes5")}</li>
             </ul>
           </div>
         </section>
 
-        <aside className={styles.notice} aria-label="Preview limitation">
-          <p className={styles.noticeTitle}>Preview limitation</p>
-          <p>
-            This is non-irreversible scaffolding for later tasks. It does not fake authentication,
-            messaging, calls, AI, or success behavior. The status banner in the app shell always
-            reads “Not connected” until real transport exists.
-          </p>
+        <aside className={styles.notice} aria-label={t("home.noticeTitle")}>
+          <p className={styles.noticeTitle}>{t("home.noticeTitle")}</p>
+          <p>{t("home.noticeBody")}</p>
         </aside>
       </main>
 
       <footer className={styles.footer}>
-        <p>Real-Time Chat and Calling · UI shell preview</p>
-        <nav className={styles.footerNav} aria-label="Secondary">
-          <Link href="/states">UI states</Link>
-          <Link href="/settings">Settings</Link>
-          <Link href="/sign-in">Sign in</Link>
+        <p>{t("home.footerTitle")}</p>
+        <nav className={styles.footerNav} aria-label={t("home.footerNavAria")}>
+          <Link href="/states">{t("nav.uiStates")}</Link>
+          <Link href="/settings">{t("nav.settings")}</Link>
+          <Link href="/sign-in">{t("common.signIn")}</Link>
         </nav>
       </footer>
     </div>

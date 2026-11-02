@@ -1,27 +1,32 @@
+"use client";
+
 import Link from "next/link";
 
 import { ActionLink } from "@/components/ui/action-link";
+import { DocumentTitle } from "@/src/i18n/document-title";
+import { useI18n } from "@/src/i18n/provider";
 import styles from "./status.module.css";
 
 export default function NotFound() {
+  const { t } = useI18n();
+
   return (
     <main id="main-content" className={styles.shell} tabIndex={-1}>
+      <DocumentTitle titleKey="documentTitle.notFound" />
       <section className={styles.card} aria-labelledby="not-found-title">
-        <p className={styles.eyebrow}>Error 404</p>
+        <p className={styles.eyebrow}>{t("status.notFoundEyebrow")}</p>
         <h1 className={styles.title} id="not-found-title">
-          Page not found
+          {t("status.notFoundTitle")}
         </h1>
-        <p className={styles.description}>
-          This route does not exist in the UI shell. Check the address or return to a known surface.
-        </p>
+        <p className={styles.description}>{t("status.notFoundDescription")}</p>
         <div className={styles.actions}>
-          <ActionLink href="/">Return home</ActionLink>
+          <ActionLink href="/">{t("common.returnHome")}</ActionLink>
           <ActionLink href="/conversations" variant="secondary">
-            Open conversations
+            {t("status.openConversations")}
           </ActionLink>
         </div>
         <p className={styles.reference}>
-          Looking for the state gallery? <Link href="/states">Open UI states</Link>.
+          {t("status.lookingForStates")} <Link href="/states">{t("status.openUiStates")}</Link>.
         </p>
       </section>
     </main>

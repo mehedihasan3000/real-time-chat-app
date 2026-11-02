@@ -1,4 +1,5 @@
-import type { Metadata } from "next";
+"use client";
+
 import Link from "next/link";
 
 import { ActionLink } from "@/components/ui/action-link";
@@ -8,108 +9,144 @@ import { PlaceholderNotice } from "@/components/ui/placeholder-notice";
 import { StatePanel } from "@/components/ui/state-panel";
 import surface from "@/components/ui/surface.module.css";
 import { sampleProfile, sampleSelf } from "@/lib/preview-data";
+import { DocumentTitle } from "@/src/i18n/document-title";
+import { useI18n } from "@/src/i18n/provider";
 
-export const metadata: Metadata = {
-  title: "Your profile",
-};
+import styles from "./profile.module.css";
 
 export default function ProfilePage() {
+  const { t, locale, timeZone } = useI18n();
+  const localeName = locale === "bn" ? t("locale.bengali") : t("locale.english");
+
   return (
     <div className="u-stack">
+      <DocumentTitle titleKey="documentTitle.profile" />
       <PageHeader
-        eyebrow="Account"
-        title="Your profile"
-        description="Preview the signed-in profile surface. No account data is loaded and no profile change can be saved."
+        eyebrow={t("profile.eyebrow")}
+        title={t("profile.title")}
+        description={t("profile.description")}
         actions={
           <ActionLink href="/settings" variant="secondary">
-            Open settings
+            {t("common.openSettings")}
           </ActionLink>
         }
       />
 
-      <PlaceholderNotice title="Profile data is not loaded">
-        <p>
-          Display name, username, email, locale, timezone, and avatar preferences are placeholders.
-          Profile loading and editing land in P1-17.
-        </p>
+      <PlaceholderNotice title={t("profile.noticeTitle")}>
+        <p>{t("profile.noticeBody")}</p>
       </PlaceholderNotice>
 
-      <section className={surface.card} aria-labelledby="own-profile-title">
-        <h2 className="visually-hidden" id="own-profile-title">
-          Profile preview
-        </h2>
-        <div className={surface.profileCard}>
-          <GeneratedAvatar
-            userId={sampleSelf.userId}
-            name={sampleSelf.name}
-            size="lg"
-            decorative={false}
-          />
-          <div>
-            <p className={surface.profileName}>{sampleSelf.name}</p>
-            <p className={surface.profileHandle}>@{sampleSelf.username}</p>
-            <div className={surface.badgeRow} style={{ marginTop: "var(--space-2)" }}>
-              <span className={surface.badge}>Generated avatar</span>
-              <span className={surface.badge}>No upload</span>
-              <span className={surface.badge}>Sample data</span>
-            </div>
-            <p className={surface.cardDescription} style={{ marginTop: "var(--space-3)" }}>
-              {sampleSelf.bio}
-            </p>
+      <section className={styles.hero} aria-labelledby="own-profile-title">
+        <GeneratedAvatar
+          userId={sampleSelf.userId}
+          name={sampleSelf.name}
+          size="xl"
+          ring
+          decorative={false}
+        />
+        <div className={styles.heroCopy}>
+          <p className={styles.eyebrow}>{t("profile.sampleEyebrow")}</p>
+          <h2 className={styles.name} id="own-profile-title">
+            {sampleSelf.name}
+          </h2>
+          <p className={styles.handle}>@{sampleSelf.username}</p>
+          <div className={surface.badgeRow}>
+            <span className={surface.badge}>{t("common.generatedAvatar")}</span>
+            <span className={surface.badge}>{t("common.noUpload")}</span>
+            <span className={surface.badge}>{t("common.sampleData")}</span>
           </div>
-        </div>
-
-        <hr className={surface.divider} />
-
-        <dl className={surface.metaGrid}>
-          <div className={surface.metaItem}>
-            <dt className={surface.metaTerm}>Email</dt>
-            <dd className={surface.metaValue}>Not loaded</dd>
+          <p className={styles.bio}>{t(sampleSelf.bioKey)}</p>
+          <div className={styles.heroActions}>
+            <ActionLink href="/settings" variant="secondary">
+              {t("common.settings")}
+            </ActionLink>
+            <ActionLink href="/onboarding/profile" variant="ghost">
+              {t("common.previewProfileSetup")}
+            </ActionLink>
           </div>
-          <div className={surface.metaItem}>
-            <dt className={surface.metaTerm}>Username</dt>
-            <dd className={surface.metaValue}>@{sampleSelf.username}</dd>
-          </div>
-          <div className={surface.metaItem}>
-            <dt className={surface.metaTerm}>Locale</dt>
-            <dd className={surface.metaValue}>{sampleSelf.locale}</dd>
-          </div>
-          <div className={surface.metaItem}>
-            <dt className={surface.metaTerm}>Timezone</dt>
-            <dd className={surface.metaValue}>{sampleSelf.timezone}</dd>
-          </div>
-        </dl>
-
-        <div className={surface.actions} style={{ marginTop: "var(--space-5)" }}>
-          <ActionLink href={`/profile/${sampleProfile.username}`} variant="secondary">
-            View sample public profile
-          </ActionLink>
-          <ActionLink href="/settings#blocked-users" variant="ghost">
-            Blocked users
-          </ActionLink>
         </div>
       </section>
 
-      <section aria-labelledby="profile-privacy-title">
-        <h2 className="u-section-title" id="profile-privacy-title">
-          Profile privacy
+      <div className={styles.layout}>
+        <section className={surface.card} aria-labelledby="profile-details-title">
+          <div className={surface.cardHeader}>
+            <div>
+              <h2 className={surface.cardTitle} id="profile-details-title">
+                {t("profile.detailsTitle")}
+              </h2>
+              <p className={surface.cardDescription}>{t("profile.detailsDescription")}</p>
+            </div>
+            <span className={surface.badge}>{t("common.notLoaded")}</span>
+          </div>
+
+          <dl className={surface.metaGrid}>
+            <div className={surface.metaItem}>
+              <dt className={surface.metaTerm}>{t("profile.email")}</dt>
+              <dd className={surface.metaValue}>{t("common.notLoaded")}</dd>
+            </div>
+            <div className={surface.metaItem}>
+              <dt className={surface.metaTerm}>{t("profile.username")}</dt>
+              <dd className={surface.metaValue}>@{sampleSelf.username}</dd>
+            </div>
+            <div className={surface.metaItem}>
+              <dt className={surface.metaTerm}>{t("profile.locale")}</dt>
+              <dd className={surface.metaValue} lang={locale}>
+                {localeName} {t("locale.provisional")}
+              </dd>
+            </div>
+            <div className={surface.metaItem}>
+              <dt className={surface.metaTerm}>{t("profile.timezone")}</dt>
+              <dd className={surface.metaValue}>{timeZone}</dd>
+            </div>
+          </dl>
+
+          <hr className={surface.divider} />
+
+          <div className={surface.actions}>
+            <ActionLink href={`/profile/${sampleProfile.username}`} variant="secondary">
+              {t("common.openSampleProfile")}
+            </ActionLink>
+            <ActionLink href="/settings#blocked-users" variant="ghost">
+              {t("common.manageBlockedUsers")}
+            </ActionLink>
+          </div>
+        </section>
+
+        <aside className={styles.side} aria-labelledby="profile-privacy-title">
+          <h2 className={styles.sideTitle} id="profile-privacy-title">
+            {t("profile.privacyTitle")}
+          </h2>
+          <p className={styles.sideBody}>{t("profile.privacyBody")}</p>
+          <ul className={styles.sideList}>
+            <li>{t("profile.privacyList1")}</li>
+            <li>{t("profile.privacyList2")}</li>
+            <li>{t("profile.privacyList3")}</li>
+            <li>{t("profile.privacyList4")}</li>
+          </ul>
+          <p className={styles.sideNote}>{t("profile.privacyNote")}</p>
+        </aside>
+      </div>
+
+      <section aria-labelledby="profile-states-title">
+        <h2 className="u-section-title" id="profile-states-title">
+          {t("profile.statesTitle")}
         </h2>
         <div className="u-grid" style={{ marginTop: "var(--space-3)" }}>
           <StatePanel
             kind="info"
-            title="Generated initials only"
-            description="The v1.0 avatar is generated from the display name with a deterministic colour. There is no upload, external image request, or third-party avatar provider."
+            title={t("profile.stateAvatarTitle")}
+            description={t("profile.stateAvatarDescription")}
           />
           <StatePanel
             kind="info"
-            title="No profile persistence"
-            description="This shell does not write preferences or profile fields. Locale and timezone storage depends on the P1-11 and P1-17 implementation scope."
+            title={t("profile.statePersistenceTitle")}
+            description={t("profile.statePersistenceDescription")}
           />
         </div>
       </section>
 
       <p className="u-muted u-small">
-        Looking for someone else? <Link href="/search">Search by exact username</Link>.
+        {t("profile.lookingForSomeone")} <Link href="/search">{t("common.searchByUsername")}</Link>.
       </p>
     </div>
   );

@@ -1,0 +1,227 @@
+.stage {
+  overflow: hidden;
+  background: var(--color-stage);
+  border: 1px solid var(--color-stage-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-stage);
+}
+
+.stagePhoto {
+  min-height: 34rem;
+  border-radius: 0;
+  background: var(--color-stage);
+}
+
+.stageScrim {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(180deg, rgb(12 6 9 / 72%) 0%, rgb(12 6 9 / 18%) 34%, rgb(12 6 9 / 86%) 100%),
+    radial-gradient(38rem 24rem at 50% 42%, transparent 20%, rgb(12 6 9 / 42%) 100%);
+}
+
+.stageTop {
+  position: absolute;
+  top: var(--space-4);
+  right: var(--space-4);
+  left: var(--space-4);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.stageBadge {
+  padding: 0.25rem 0.65rem;
+  background: rgb(255 246 241 / 12%);
+  border: 1px solid rgb(255 246 241 / 28%);
+  border-radius: var(--radius-pill);
+  color: var(--color-stage-text);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.stageMeta {
+  color: var(--color-stage-muted);
+  font-size: var(--text-xs);
+}
+
+.stagePeople {
+  position: absolute;
+  inset: 4.5rem var(--space-4) 9.5rem;
+  display: grid;
+  place-items: center;
+}
+
+.remoteFrame {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-1);
+  padding: var(--space-6) var(--space-7);
+  background: rgb(12 6 9 / 28%);
+  border: 1px solid rgb(255 246 241 / 16%);
+  border-radius: 8rem 8rem var(--radius-xl) var(--radius-xl);
+  backdrop-filter: blur(0.35rem);
+}
+
+.remoteName {
+  margin-top: var(--space-3);
+  font-family: var(--font-display);
+  font-size: var(--text-3xl);
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  line-height: 1;
+  color: var(--color-stage-text);
+}
+
+.remoteHandle {
+  color: var(--color-stage-muted);
+  font-size: var(--text-xs);
+}
+
+.selfFrame {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  gap: var(--space-1);
+  justify-items: center;
+  padding: var(--space-3);
+  background: rgb(12 6 9 / 55%);
+  border: 1px solid rgb(255 246 241 / 22%);
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(0.5rem);
+}
+
+.selfLabel {
+  color: var(--color-stage-muted);
+  font-size: 0.66rem;
+  font-weight: 650;
+}
+
+.stageBottom {
+  position: absolute;
+  right: var(--space-4);
+  bottom: var(--space-4);
+  left: var(--space-4);
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+}
+
+.stageHint {
+  max-width: 48rem;
+  color: var(--color-stage-muted);
+  font-size: 0.7rem;
+  line-height: 1.5;
+}
+
+.layout {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.sideChat {
+  display: grid;
+  gap: var(--space-3);
+  align-content: start;
+  padding: var(--space-4);
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-sm);
+}
+
+.sideChatHeader {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  justify-content: space-between;
+}
+
+.sideChatTitle {
+  font-family: var(--font-display);
+  font-size: var(--text-lg);
+  font-weight: 550;
+  letter-spacing: -0.015em;
+}
+
+.sideChatNote {
+  color: var(--color-text-muted);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
+.sideComposer {
+  display: grid;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-border);
+}
+
+@media (min-width: 64rem) {
+  .layout {
+    grid-template-columns: minmax(0, 1fr) 21rem;
+    align-items: start;
+  }
+
+  .sideChat {
+    position: sticky;
+    top: calc(var(--space-5) + var(--space-2));
+  }
+}
+
+@media (max-width: 48rem) {
+  .stagePhoto {
+    min-height: 32rem;
+  }
+
+  .stagePeople {
+    inset: 4rem var(--space-3) 11rem;
+  }
+
+  .remoteFrame {
+    padding: var(--space-5) var(--space-5);
+  }
+
+  .remoteName {
+    font-size: var(--text-2xl);
+  }
+
+  .selfFrame {
+    right: 0;
+    bottom: -0.5rem;
+    padding: var(--space-2);
+  }
+
+  .stageTop,
+  .stageBottom {
+    right: var(--space-3);
+    left: var(--space-3);
+  }
+}
+
+@media (max-width: 30rem) {
+  .stagePhoto {
+    min-height: 34rem;
+  }
+
+  .stagePeople {
+    inset: 5rem var(--space-2) 13rem;
+  }
+
+  .remoteFrame {
+    padding: var(--space-4) var(--space-3);
+    border-radius: 5rem 5rem var(--radius-lg) var(--radius-lg);
+  }
+
+  .selfFrame {
+    top: 0;
+    right: 0;
+    bottom: auto;
+  }
+}

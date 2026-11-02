@@ -48,6 +48,9 @@ jobs:
       - name: Unit and contract tests
         run: npm test
 
+      - name: Catalog coverage
+        run: npm run i18n:check
+
       - name: Dependency audit
         run: npm run audit:ci
 

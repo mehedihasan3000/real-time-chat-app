@@ -1,4 +1,5 @@
-import type { Metadata } from "next";
+"use client";
+
 import Link from "next/link";
 
 import { AuthCard } from "@/components/ui/auth-card";
@@ -6,37 +7,35 @@ import { PlaceholderNotice } from "@/components/ui/placeholder-notice";
 import { PreviewAction } from "@/components/ui/preview-action";
 import { PreviewForm } from "@/components/ui/preview-form";
 import surfaceStyles from "@/components/ui/surface.module.css";
-
-export const metadata: Metadata = {
-  title: "Sign in",
-};
+import { DocumentTitle } from "@/src/i18n/document-title";
+import { useI18n } from "@/src/i18n/provider";
 
 export default function SignInPage() {
+  const { t } = useI18n();
+
   return (
     <AuthCard
-      title="Sign in"
-      description="Preview the sign-in screen. No credentials are sent and no session is created."
+      title={t("auth.signIn.title")}
+      description={t("auth.signIn.description")}
       footer={
         <p>
-          New here? <Link href="/sign-up">Create an account</Link>. You can also{" "}
-          <Link href="/verify-email">verify an email</Link> or{" "}
-          <Link href="/forgot-password">recover a password</Link>.
+          {t("auth.signIn.footer")} <Link href="/sign-up">{t("auth.signIn.footerSignUp")}</Link>.{" "}
+          <Link href="/verify-email">{t("auth.signIn.footerVerify")}</Link>{" "}
+          <Link href="/forgot-password">{t("auth.signIn.footerForgot")}</Link>.
         </p>
       }
     >
+      <DocumentTitle titleKey="documentTitle.signIn" />
       <div className="u-stack">
-        <PlaceholderNotice title="Authentication is not implemented yet">
-          <p>
-            This screen exists to lock the layout and labels. Email/password sign-in, Google
-            sign-in, sessions, and the 5-minute API token land in P1-06.
-          </p>
+        <PlaceholderNotice title={t("auth.signIn.noticeTitle")}>
+          <p>{t("auth.signIn.noticeBody")}</p>
         </PlaceholderNotice>
 
         <PreviewForm
           fields={[
             {
               name: "email",
-              label: "Email",
+              label: t("common.email"),
               type: "email",
               autoComplete: "email",
               required: true,
@@ -44,33 +43,30 @@ export default function SignInPage() {
             },
             {
               name: "password",
-              label: "Password",
+              label: t("common.password"),
               type: "password",
               autoComplete: "current-password",
               required: true,
               minLength: 12,
               maxLength: 128,
-              hint: "Passwords are 12–128 characters. No password is checked in this preview.",
+              hint: t("auth.signIn.passwordHint"),
             },
           ]}
-          submitLabel="Preview sign in"
-          statusMessage="Preview only: no credentials were sent and no session was created. Sign-in behavior lands in P1-06."
+          submitLabel={t("auth.signIn.submit")}
+          statusMessage={t("auth.signIn.status")}
         >
           <label className={surfaceStyles.checkboxRow} htmlFor="remember-browser">
             <input id="remember-browser" name="remember-browser" type="checkbox" />
-            <span>Remember this browser for 30 days (preview only)</span>
+            <span>{t("auth.signIn.remember")}</span>
           </label>
         </PreviewForm>
 
         <div>
-          <PreviewAction
-            message="Google sign-in is not implemented. No OAuth request was made; account linking is part of P1-06."
-            describedBy="google-sign-in-hint"
-          >
-            Continue with Google (preview)
+          <PreviewAction message={t("auth.signIn.googleMessage")} describedBy="google-sign-in-hint">
+            {t("auth.signIn.google")}
           </PreviewAction>
           <p className={surfaceStyles.hint} id="google-sign-in-hint">
-            Google sign-in will require explicit account linking and a configured OAuth redirect.
+            {t("auth.signIn.googleHint")}
           </p>
         </div>
       </div>

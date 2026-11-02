@@ -25,7 +25,8 @@
     "test:watch": "vitest",
     "audit:ci": "npm audit --audit-level=low",
     "secret:scan": "node scripts/secret-scan.mjs",
-    "ci:local": "npm run format:check && npm run lint && npm run typecheck && npm run build && npm test && npm run audit:ci && npm run secret:scan",
+    "i18n:check": "node scripts/check-i18n-catalogs.mjs",
+    "ci:local": "npm run format:check && npm run lint && npm run typecheck && npm run build && npm test && npm run i18n:check && npm run audit:ci && npm run secret:scan",
     "config:check": "npm run config:check -w @chat/api",
     "db:check": "npm run db:check -w @chat/api",
     "seed": "npm run seed -w @chat/api",
@@ -48,5 +49,8 @@
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.72.1",
     "vitest": "^5.0.5"
+  },
+  "overrides": {
+    "minimatch": "^11.0.3"
   }
 }
