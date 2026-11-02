@@ -67,3 +67,42 @@ jobs:
             coverage/
           if-no-files-found: warn
           retention-days: 14
+
+  e2e:
+    name: e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build contracts and web
+        run: npm run build -w @chat/contracts && npm run build -w @chat/web
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser end-to-end tests
+        run: npm run test:e2e
+
+      - name: Upload Playwright reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: playwright-reports
+          path: |
+            playwright-report/
+            test-results/
+            reports/e2e-junit.xml
+          if-no-files-found: warn
+          retention-days: 14
