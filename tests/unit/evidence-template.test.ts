@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 const template = readFileSync(
-  new URL("../../docs/evidence/TEST-EVIDENCE-TEMPLATE.md", import.meta.url),
+  new URL("../evidence/TEST-EVIDENCE-TEMPLATE.md", import.meta.url),
   "utf8",
 );
 

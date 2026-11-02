@@ -161,6 +161,10 @@ direct/forced-relay network profiles, and network-free provider doubles. It make
 real-provider, real-device, or real-network claim. Run `npm run test:e2e:install` once before
 running `npm run test:e2e` locally.
 
+Copy `tests/evidence/TEST-EVIDENCE-TEMPLATE.md` for each executed suite or acceptance session.
+It records the tested revision, environment, build/config, fixtures, expected/actual results,
+coverage thresholds, defects, and reviewer sign-off.
+
 `main` requires the `ci` status check. A pull request with a failing or missing `ci` run cannot
 be merged, even when all other review settings pass.
 
