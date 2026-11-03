@@ -165,8 +165,8 @@ Copy `tests/evidence/TEST-EVIDENCE-TEMPLATE.md` for each executed suite or accep
 It records the tested revision, environment, build/config, fixtures, expected/actual results,
 coverage thresholds, defects, and reviewer sign-off.
 
-`main` requires the `ci` status check. A pull request with a failing or missing `ci` run cannot
-be merged, even when all other review settings pass.
+`main` requires the `ci` and `e2e` status checks. A pull request with a failing or missing `ci`
+or `e2e` run cannot be merged, even when all other review settings pass.
 
 ## Branching
 
