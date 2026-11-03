@@ -6,11 +6,12 @@ One-to-one real-time chat and audio/video calling web application.
 
 This repository is at the application-scaffold and UI-shell stage. The workspace, local build,
 typecheck, lint, environment validation, database check, synthetic seed, and AI mock are in
-place. Automated CI quality gates cover formatting, linting, typechecking, the build, unit and
-contract tests, a dependency audit, and a tracked-file secret scan. The web app now has a
-navigable shell for every MVP surface; the screens are static placeholders and do not call the
-API. Product features, security controls, capacity evidence, and accessibility verification land
-in later tasks. No security, capacity, or accessibility claim is made yet.
+place. Automated CI quality gates cover formatting, linting, typechecking, the build, unit,
+contract, integration, and browser end-to-end tests, a dependency audit, and a tracked-file
+secret scan. The web app now has a navigable shell for every MVP surface; the screens are static
+placeholders and do not call the API. Product features, security controls, capacity evidence,
+and accessibility verification land in later tasks. No security, capacity, or accessibility
+claim is made yet.
 
 ## Requirements
 
@@ -105,25 +106,27 @@ English copy is provisional. The shell is not an accessibility conformance claim
 
 ## Commands
 
-| Command                | Description                                                |
-| ---------------------- | ---------------------------------------------------------- |
-| `npm run dev`          | Run the web and API development servers                    |
-| `npm run build`        | Build contracts, API, and web for production               |
-| `npm start`            | Start the built web and API servers                        |
-| `npm run typecheck`    | Typecheck every workspace, including tests                 |
-| `npm run lint`         | Lint the repository with ESLint                            |
-| `npm run format`       | Format with Prettier                                       |
-| `npm run format:check` | Verify formatting without writing                          |
-| `npm test`             | Run unit and contract tests with coverage thresholds       |
-| `npm run test:watch`   | Run tests in watch mode                                    |
-| `npm run audit:ci`     | Fail on low-or-higher dependency vulnerabilities           |
-| `npm run secret:scan`  | Scan tracked files for high-confidence secret patterns     |
-| `npm run ci:local`     | Run the same gates as CI locally                           |
-| `npm run config:check` | Validate `.env` and print a redacted configuration summary |
-| `npm run db:check`     | Connect to MongoDB and run a `ping`                        |
-| `npm run seed`         | Upsert synthetic local fixtures into `dev_fixtures`        |
-| `npm run smoke:ai`     | Exercise the local AI mock without a network request       |
-| `npm run verify:local` | Run the config, database, seed, and AI checks together     |
+| Command                    | Description                                                |
+| -------------------------- | ---------------------------------------------------------- |
+| `npm run dev`              | Run the web and API development servers                    |
+| `npm run build`            | Build contracts, API, and web for production               |
+| `npm start`                | Start the built web and API servers                        |
+| `npm run typecheck`        | Typecheck every workspace, including tests                 |
+| `npm run lint`             | Lint the repository with ESLint                            |
+| `npm run format`           | Format with Prettier                                       |
+| `npm run format:check`     | Verify formatting without writing                          |
+| `npm test`                 | Run unit, contract, and integration tests with coverage    |
+| `npm run test:watch`       | Run tests in watch mode                                    |
+| `npm run test:e2e`         | Run the Playwright browser suite against the built web app |
+| `npm run test:e2e:install` | Install the Chromium browser used by the e2e suite         |
+| `npm run audit:ci`         | Fail on low-or-higher dependency vulnerabilities           |
+| `npm run secret:scan`      | Scan tracked files for high-confidence secret patterns     |
+| `npm run ci:local`         | Run the same gates as CI locally                           |
+| `npm run config:check`     | Validate `.env` and print a redacted configuration summary |
+| `npm run db:check`         | Connect to MongoDB and run a `ping`                        |
+| `npm run seed`             | Upsert synthetic local fixtures into `dev_fixtures`        |
+| `npm run smoke:ai`         | Exercise the local AI mock without a network request       |
+| `npm run verify:local`     | Run the config, database, seed, and AI checks together     |
 
 ## Configuration
 
@@ -146,10 +149,21 @@ included.
 ## Continuous integration
 
 The `.github/workflows/ci.yml` workflow runs on every pull request, on pushes to `main`, and on
-manual dispatch. The single `ci` job installs from the lockfile with `npm ci` and runs
-formatting, linting, typechecking, the build, unit and contract tests with coverage, a
-dependency audit, and a tracked-file secret scan. It requires no production credentials or
-external services. JUnit and coverage reports are uploaded as the `test-reports` artifact.
+manual dispatch. The `ci` job installs from the lockfile with `npm ci` and runs formatting,
+linting, typechecking, the build, unit/contract/integration tests with coverage, a dependency
+audit, and a tracked-file secret scan. A separate `e2e` job builds the web app, installs
+Chromium, and runs the Playwright suite. Neither job requires production credentials or external
+services. JUnit, coverage, Playwright HTML, and trace artifacts are uploaded for review.
+
+The browser suite uses only synthetic fixtures in `tests/fixtures/`: two conversation
+participants plus an unrelated user, English/Bengali/mixed-Unicode content, key state labels,
+direct/forced-relay network profiles, and network-free provider doubles. It makes no
+real-provider, real-device, or real-network claim. Run `npm run test:e2e:install` once before
+running `npm run test:e2e` locally.
+
+Copy `tests/evidence/TEST-EVIDENCE-TEMPLATE.md` for each executed suite or acceptance session.
+It records the tested revision, environment, build/config, fixtures, expected/actual results,
+coverage thresholds, defects, and reviewer sign-off.
 
 `main` requires the `ci` status check. A pull request with a failing or missing `ci` run cannot
 be merged, even when all other review settings pass.

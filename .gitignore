@@ -9,6 +9,9 @@ reports/
 .turbo/
 .cache/
 *.tsbuildinfo
+playwright-report/
+test-results/
+blob-report/
 
 # Local environment and secrets
 .env
@@ -59,3 +62,6 @@ docs/ai-evaluation/results/
 # Python
 __pycache__/
 *.py[cod]
+
+ui/
+assets/
