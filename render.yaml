@@ -19,7 +19,9 @@ services:
     region: singapore
     branch: main
     autoDeploy: true
-    buildCommand: npm ci && npm run build -w @chat/contracts && npm run build -w @chat/api
+    # NODE_ENV=production makes npm omit devDependencies by default. The build
+    # needs TypeScript and @types/node, so include devDependencies explicitly.
+    buildCommand: npm ci --include=dev && npm run build -w @chat/contracts && npm run build -w @chat/api
     startCommand: npm run start -w @chat/api
     healthCheckPath: /health
     envVars:
