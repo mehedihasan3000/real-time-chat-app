@@ -17,6 +17,7 @@ export function loadRootEnvFile(): void {
 }
 
 const DEV_AUTH_SECRET = "local-dev-only-change-me-32-characters-minimum";
+const DEV_STUN_URLS = "stun:localhost:3478";
 const DEV_TURN_USERNAME = "dev";
 const DEV_TURN_CREDENTIAL = "dev-only-not-a-secret";
 const DEV_TURN_REALM = "chat.local";
@@ -84,23 +85,50 @@ const mongoUriSchema = z
     }
   }, "MONGODB_URI must be a valid mongodb:// or mongodb+srv:// connection string");
 
-const turnUrlsSchema = z
+const splitUrls = (value: string): string[] =>
+  value
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0);
+
+const stunUrlsSchema = z
   .string()
   .trim()
-  .default("turn:localhost:3478?transport=udp,turn:localhost:3478?transport=tcp")
+  .default(DEV_STUN_URLS)
   .transform((value, context) => {
-    const urls = value
-      .split(",")
-      .map((entry) => entry.trim())
-      .filter((entry) => entry.length > 0);
+    const urls = splitUrls(value);
 
     if (urls.length === 0) {
       context.addIssue({
         code: "custom",
-        message: "TURN_URLS must contain at least one TURN URL",
+        message: "STUN_URLS must contain at least one STUN URL",
       });
       return z.NEVER;
     }
+
+    for (const url of urls) {
+      if (!/^stuns?:[^,\s]+$/.test(url)) {
+        context.addIssue({
+          code: "custom",
+          message: "STUN_URLS contains an invalid STUN URL",
+        });
+        return z.NEVER;
+      }
+    }
+
+    return urls;
+  });
+
+/**
+ * TURN is optional. The prototype is STUN-only (CC-011); setting TURN_URLS is
+ * the single switch that enables TURN later, with no code change required.
+ */
+const turnUrlsSchema = z
+  .string()
+  .trim()
+  .default("")
+  .transform((value, context) => {
+    const urls = splitUrls(value);
 
     for (const url of urls) {
       if (!/^turns?:[^,\s]+$/.test(url)) {
@@ -121,36 +149,67 @@ const booleanSchema = (defaultValue: "true" | "false") =>
     .default(defaultValue)
     .transform((value) => value === "true");
 
-const envSchema = z.object({
-  NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
-  PORT: z.coerce.number().int().min(1).max(65535).default(3001),
-  APP_ORIGIN: originSchema("APP_ORIGIN"),
-  API_ORIGIN: originSchema("API_ORIGIN"),
-  MONGODB_URI: mongoUriSchema,
-  MONGODB_DB: z
-    .string({ error: "MONGODB_DB is required" })
-    .trim()
-    .regex(
-      /^[A-Za-z0-9_-]{1,63}$/,
-      "MONGODB_DB must contain only letters, digits, underscores, or hyphens",
-    ),
-  MONGODB_CONNECT_TIMEOUT_MS: z.coerce.number().int().min(1000).max(30000).default(5000),
-  BETTER_AUTH_SECRET: z
-    .string({ error: "BETTER_AUTH_SECRET is required" })
-    .min(32, "BETTER_AUTH_SECRET must be at least 32 characters"),
-  AI_PROVIDER: z.enum(["mock", "groq"]).default("mock"),
-  AI_MODEL: z.string().trim().min(1).default("mock"),
-  AI_API_KEY: z.string().default(""),
-  AI_CONSENT_REQUIRED: booleanSchema("true"),
-  TURN_URLS: turnUrlsSchema,
-  TURN_USERNAME: z.string().trim().min(1).default(DEV_TURN_USERNAME),
-  TURN_CREDENTIAL: z.string().min(1).default(DEV_TURN_CREDENTIAL),
-  TURN_REALM: z.string().trim().min(1).default(DEV_TURN_REALM),
-  TURN_CREDENTIAL_TTL_SECONDS: z.coerce.number().int().min(60).max(7200).default(7200),
-});
+const envSchema = z
+  .object({
+    NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
+    PORT: z.coerce.number().int().min(1).max(65535).default(3001),
+    APP_ORIGIN: originSchema("APP_ORIGIN"),
+    API_ORIGIN: originSchema("API_ORIGIN"),
+    MONGODB_URI: mongoUriSchema,
+    MONGODB_DB: z
+      .string({ error: "MONGODB_DB is required" })
+      .trim()
+      .regex(
+        /^[A-Za-z0-9_-]{1,63}$/,
+        "MONGODB_DB must contain only letters, digits, underscores, or hyphens",
+      ),
+    MONGODB_CONNECT_TIMEOUT_MS: z.coerce.number().int().min(1000).max(30000).default(5000),
+    BETTER_AUTH_SECRET: z
+      .string({ error: "BETTER_AUTH_SECRET is required" })
+      .min(32, "BETTER_AUTH_SECRET must be at least 32 characters"),
+    AI_PROVIDER: z.enum(["mock", "groq"]).default("mock"),
+    AI_MODEL: z.string().trim().min(1).default("mock"),
+    AI_API_KEY: z.string().default(""),
+    AI_CONSENT_REQUIRED: booleanSchema("true"),
+    STUN_URLS: stunUrlsSchema,
+    TURN_URLS: turnUrlsSchema,
+    TURN_USERNAME: z.string().trim().default(""),
+    TURN_CREDENTIAL: z.string().default(""),
+    TURN_REALM: z.string().trim().default(""),
+    TURN_CREDENTIAL_TTL_SECONDS: z.coerce.number().int().min(60).max(7200).default(7200),
+  })
+  .superRefine((value, context) => {
+    if (value.TURN_URLS.length === 0) {
+      return;
+    }
+
+    for (const key of ["TURN_USERNAME", "TURN_CREDENTIAL", "TURN_REALM"] as const) {
+      if (value[key].length === 0) {
+        context.addIssue({
+          code: "custom",
+          path: [key],
+          message: `${key} is required when TURN_URLS is set`,
+        });
+      }
+    }
+  });
 
 export type NodeEnvironment = "development" | "test" | "production";
 export type AiProviderName = "mock" | "groq";
+
+export interface TurnConfig {
+  urls: string[];
+  username: string;
+  credential: string;
+  realm: string;
+  credentialTtlSeconds: number;
+}
+
+export interface IceServer {
+  urls: string[];
+  username?: string;
+  credential?: string;
+}
 
 export interface AppConfig {
   nodeEnv: NodeEnvironment;
@@ -171,12 +230,9 @@ export interface AppConfig {
     apiKey: string;
     consentRequired: boolean;
   };
-  turn: {
-    urls: string[];
-    username: string;
-    credential: string;
-    realm: string;
-    credentialTtlSeconds: number;
+  ice: {
+    stunUrls: string[];
+    turn: TurnConfig | null;
   };
 }
 
@@ -197,10 +253,12 @@ export interface ConfigSummary {
     model: string;
     consentRequired: boolean;
   };
-  turn: {
-    urls: string[];
-    realm: string;
-    credentialTtlSeconds: number;
+  ice: {
+    stunUrls: string[];
+    turnConfigured: boolean;
+    turnUrls: string[];
+    turnRealm: string | null;
+    turnCredentialTtlSeconds: number | null;
   };
 }
 
@@ -240,12 +298,18 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
       apiKey: result.data.AI_API_KEY,
       consentRequired: result.data.AI_CONSENT_REQUIRED,
     },
-    turn: {
-      urls: result.data.TURN_URLS,
-      username: result.data.TURN_USERNAME,
-      credential: result.data.TURN_CREDENTIAL,
-      realm: result.data.TURN_REALM,
-      credentialTtlSeconds: result.data.TURN_CREDENTIAL_TTL_SECONDS,
+    ice: {
+      stunUrls: result.data.STUN_URLS,
+      turn:
+        result.data.TURN_URLS.length > 0
+          ? {
+              urls: result.data.TURN_URLS,
+              username: result.data.TURN_USERNAME,
+              credential: result.data.TURN_CREDENTIAL,
+              realm: result.data.TURN_REALM,
+              credentialTtlSeconds: result.data.TURN_CREDENTIAL_TTL_SECONDS,
+            }
+          : null,
     },
   };
 
@@ -275,12 +339,36 @@ export function describeConfig(config: AppConfig): ConfigSummary {
       model: config.ai.model,
       consentRequired: config.ai.consentRequired,
     },
-    turn: {
-      urls: config.turn.urls,
-      realm: config.turn.realm,
-      credentialTtlSeconds: config.turn.credentialTtlSeconds,
+    ice: {
+      stunUrls: config.ice.stunUrls,
+      turnConfigured: config.ice.turn !== null,
+      turnUrls: config.ice.turn?.urls ?? [],
+      turnRealm: config.ice.turn?.realm ?? null,
+      turnCredentialTtlSeconds: config.ice.turn?.credentialTtlSeconds ?? null,
     },
   };
+}
+
+/**
+ * Single extension point for WebRTC ICE configuration.
+ *
+ * The prototype is STUN-only. To add TURN later, set TURN_URLS,
+ * TURN_USERNAME, TURN_CREDENTIAL, and TURN_REALM; this function then includes
+ * the TURN server without a code change. Per-call short-lived credentials
+ * remain P3-04 and are not implemented here.
+ */
+export function buildIceServers(config: AppConfig): IceServer[] {
+  const servers: IceServer[] = [{ urls: config.ice.stunUrls }];
+
+  if (config.ice.turn) {
+    servers.push({
+      urls: config.ice.turn.urls,
+      username: config.ice.turn.username,
+      credential: config.ice.turn.credential,
+    });
+  }
+
+  return servers;
 }
 
 /**
@@ -345,27 +433,43 @@ function validateProductionConfig(config: AppConfig): string[] {
     issues.push("AI_CONSENT_REQUIRED must be true in production.");
   }
 
-  for (const turnUrl of config.turn.urls) {
-    const host =
-      turnUrl
-        .replace(/^turns?:/, "")
-        .split("?")[0]
-        ?.split(":")[0] ?? "";
-    if (isLocalHostname(host)) {
-      issues.push("TURN_URLS must not point at localhost in production.");
+  for (const stunUrl of config.ice.stunUrls) {
+    if (isLocalHostname(iceUrlHost(stunUrl))) {
+      issues.push("STUN_URLS must not point at localhost in production.");
       break;
     }
   }
 
-  if (
-    config.turn.username === DEV_TURN_USERNAME ||
-    config.turn.credential === DEV_TURN_CREDENTIAL ||
-    config.turn.realm === DEV_TURN_REALM
-  ) {
-    issues.push("TURN test credentials must not be used in production.");
+  if (config.ice.turn) {
+    for (const turnUrl of config.ice.turn.urls) {
+      if (isLocalHostname(iceUrlHost(turnUrl))) {
+        issues.push("TURN_URLS must not point at localhost in production.");
+        break;
+      }
+    }
+
+    if (
+      config.ice.turn.username === DEV_TURN_USERNAME ||
+      config.ice.turn.credential === DEV_TURN_CREDENTIAL ||
+      config.ice.turn.realm === DEV_TURN_REALM
+    ) {
+      issues.push("TURN test credentials must not be used in production.");
+    }
   }
 
   return issues;
+}
+
+function iceUrlHost(iceUrl: string): string {
+  const withoutScheme = iceUrl.replace(/^(stuns?|turns?):/, "");
+  const authority = withoutScheme.split("?")[0] ?? "";
+
+  if (authority.startsWith("[")) {
+    const closingBracket = authority.indexOf("]");
+    return closingBracket >= 0 ? authority.slice(0, closingBracket + 1) : authority;
+  }
+
+  return authority.split(":")[0] ?? "";
 }
 
 function formatIssues(error: z.ZodError): string[] {

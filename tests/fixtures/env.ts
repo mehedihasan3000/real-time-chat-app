@@ -17,6 +17,11 @@ export const productionEnv: Record<string, string> = {
   AI_MODEL: "openai/gpt-oss-120b",
   AI_API_KEY: "synthetic-test-key",
   AI_CONSENT_REQUIRED: "true",
+  STUN_URLS: "stun:stun.cloudflare.com:3478",
+};
+
+export const productionTurnEnv: Record<string, string> = {
+  ...productionEnv,
   TURN_URLS: "turns:turn.example.com:5349?transport=tcp",
   TURN_USERNAME: "production-user",
   TURN_CREDENTIAL: "test-only-production-credential",

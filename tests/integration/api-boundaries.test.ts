@@ -36,12 +36,15 @@ const mockConfig: AppConfig = {
     apiKey: "",
     consentRequired: true,
   },
-  turn: {
-    urls: ["turns:turn.example.test:5349?transport=tcp"],
-    username: "synthetic-turn-user",
-    credential: "synthetic-turn-credential",
-    realm: "chat.example.test",
-    credentialTtlSeconds: 300,
+  ice: {
+    stunUrls: ["stun:stun.example.test:3478"],
+    turn: {
+      urls: ["turns:turn.example.test:5349?transport=tcp"],
+      username: "synthetic-turn-user",
+      credential: "synthetic-turn-credential",
+      realm: "chat.example.test",
+      credentialTtlSeconds: 300,
+    },
   },
 };
 
