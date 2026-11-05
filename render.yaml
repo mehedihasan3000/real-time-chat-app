@@ -4,8 +4,8 @@
 # This file contains no secrets. Values marked `sync: false` must be entered in
 # the Render dashboard before the first successful deploy. The service is
 # intentionally fail-closed: apps/api/src/config.ts rejects production startup
-# until the real staging origins, Atlas URI, auth secret, Groq key, and TURN
-# credentials are present.
+# until the real staging origins, Atlas URI, auth secret, and Groq key are
+# present. The prototype is STUN-only; TURN is optional and deferred (CC-011).
 #
 # Free-tier boundaries: plan `free`, Singapore region, one instance, no
 # persistent disk, no shell. The service spins down after 15 minutes idle and
@@ -53,15 +53,18 @@ services:
         sync: false
       - key: AI_CONSENT_REQUIRED
         value: "true"
-      # Cloudflare TURN free-tier values. The current API config uses a static
-      # credential placeholder; per-call credential generation is P3-04.
-      - key: TURN_URLS
-        sync: false
-      - key: TURN_USERNAME
-        sync: false
-      - key: TURN_CREDENTIAL
-        sync: false
-      - key: TURN_REALM
-        sync: false
-      - key: TURN_CREDENTIAL_TTL_SECONDS
-        value: "7200"
+      # STUN-only prototype. TURN is deferred under CC-011. To add TURN later,
+      # add TURN_URLS, TURN_USERNAME, TURN_CREDENTIAL, and TURN_REALM as
+      # `sync: false` entries and redeploy; no application code change is needed.
+      - key: STUN_URLS
+        value: "stun:stun.cloudflare.com:3478"
+      # - key: TURN_URLS
+      #   sync: false
+      # - key: TURN_USERNAME
+      #   sync: false
+      # - key: TURN_CREDENTIAL
+      #   sync: false
+      # - key: TURN_REALM
+      #   sync: false
+      # - key: TURN_CREDENTIAL_TTL_SECONDS
+      #   value: "7200"

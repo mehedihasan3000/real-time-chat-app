@@ -2,10 +2,11 @@ import { describe, expect, it } from "vitest";
 import {
   ConfigError,
   assertSafeSeedTarget,
+  buildIceServers,
   describeConfig,
   loadConfig,
 } from "../../apps/api/src/config.js";
-import { baseEnv, productionEnv } from "../fixtures/env.js";
+import { baseEnv, productionEnv, productionTurnEnv } from "../fixtures/env.js";
 
 function load(overrides: Record<string, string | undefined> = {}) {
   return loadConfig({ ...baseEnv, ...overrides });
@@ -57,12 +58,9 @@ describe("loadConfig", () => {
       apiKey: "",
       consentRequired: true,
     });
-    expect(config.turn).toEqual({
-      urls: ["turn:localhost:3478?transport=udp", "turn:localhost:3478?transport=tcp"],
-      username: "dev",
-      credential: "dev-only-not-a-secret",
-      realm: "chat.local",
-      credentialTtlSeconds: 7200,
+    expect(config.ice).toEqual({
+      stunUrls: ["stun:localhost:3478"],
+      turn: null,
     });
   });
 
@@ -72,7 +70,11 @@ describe("loadConfig", () => {
       PORT: "8080",
       AI_MODEL: "custom-model",
       AI_CONSENT_REQUIRED: "false",
+      STUN_URLS: "stun:stun.example.com:3478",
       TURN_URLS: "turn:a.example.com:3478,turn:b.example.com:3478",
+      TURN_USERNAME: "local-user",
+      TURN_CREDENTIAL: "local-credential",
+      TURN_REALM: "chat.example.com",
       TURN_CREDENTIAL_TTL_SECONDS: "60",
     });
 
@@ -80,8 +82,14 @@ describe("loadConfig", () => {
     expect(config.port).toBe(8080);
     expect(config.ai.model).toBe("custom-model");
     expect(config.ai.consentRequired).toBe(false);
-    expect(config.turn.urls).toEqual(["turn:a.example.com:3478", "turn:b.example.com:3478"]);
-    expect(config.turn.credentialTtlSeconds).toBe(60);
+    expect(config.ice.stunUrls).toEqual(["stun:stun.example.com:3478"]);
+    expect(config.ice.turn).toEqual({
+      urls: ["turn:a.example.com:3478", "turn:b.example.com:3478"],
+      username: "local-user",
+      credential: "local-credential",
+      realm: "chat.example.com",
+      credentialTtlSeconds: 60,
+    });
   });
 
   it("normalizes a valid origin with a trailing slash", () => {
@@ -166,11 +174,43 @@ describe("loadConfig", () => {
     );
   });
 
-  it("rejects empty or invalid TURN URLs", () => {
-    expect(configError({ TURN_URLS: "" }).issues.join("\n")).toContain("at least one TURN URL");
-    expect(configError({ TURN_URLS: "http://turn.example.com" }).issues.join("\n")).toContain(
-      "invalid TURN URL",
+  it("allows a STUN-only configuration without TURN values", () => {
+    const config = load({
+      TURN_URLS: "",
+      TURN_USERNAME: "",
+      TURN_CREDENTIAL: "",
+      TURN_REALM: "",
+    });
+
+    expect(config.ice.stunUrls).toEqual(["stun:localhost:3478"]);
+    expect(config.ice.turn).toBeNull();
+  });
+
+  it("rejects empty or invalid STUN URLs", () => {
+    expect(configError({ STUN_URLS: "" }).issues.join("\n")).toContain("at least one STUN URL");
+    expect(configError({ STUN_URLS: "http://stun.example.com" }).issues.join("\n")).toContain(
+      "invalid STUN URL",
     );
+  });
+
+  it("rejects invalid TURN URLs and incomplete TURN credentials", () => {
+    expect(
+      configError({
+        TURN_URLS: "http://turn.example.com",
+        TURN_USERNAME: "local-user",
+        TURN_CREDENTIAL: "local-credential",
+        TURN_REALM: "chat.example.com",
+      }).issues.join("\n"),
+    ).toContain("invalid TURN URL");
+
+    expect(
+      configError({
+        TURN_URLS: "turn:turn.example.com:3478",
+        TURN_USERNAME: "",
+        TURN_CREDENTIAL: "",
+        TURN_REALM: "",
+      }).issues.join("\n"),
+    ).toContain("TURN_USERNAME is required when TURN_URLS is set");
   });
 
   it("rejects a non-boolean consent value", () => {
@@ -181,12 +221,26 @@ describe("loadConfig", () => {
 });
 
 describe("production configuration", () => {
-  it("accepts a production-safe configuration", () => {
+  it("accepts a production-safe STUN-only configuration", () => {
     const config = loadConfig(productionEnv);
 
     expect(config.nodeEnv).toBe("production");
     expect(config.ai.provider).toBe("groq");
-    expect(config.turn.urls).toEqual(["turns:turn.example.com:5349?transport=tcp"]);
+    expect(config.ice.stunUrls).toEqual(["stun:stun.cloudflare.com:3478"]);
+    expect(config.ice.turn).toBeNull();
+  });
+
+  it("accepts an optional production TURN configuration", () => {
+    const config = loadConfig(productionTurnEnv);
+
+    expect(config.ice.stunUrls).toEqual(["stun:stun.cloudflare.com:3478"]);
+    expect(config.ice.turn).toEqual({
+      urls: ["turns:turn.example.com:5349?transport=tcp"],
+      username: "production-user",
+      credential: "test-only-production-credential",
+      realm: "chat.example.com",
+      credentialTtlSeconds: 7200,
+    });
   });
 
   it.each([
@@ -261,10 +315,19 @@ describe("production configuration", () => {
     ).toContain("AI_CONSENT_REQUIRED must be true in production");
   });
 
-  it("rejects local TURN endpoints in production", () => {
+  it("rejects a local STUN endpoint in production", () => {
     expect(
       configError({
         ...productionEnv,
+        STUN_URLS: "stun:localhost:3478",
+      }).issues.join("\n"),
+    ).toContain("STUN_URLS must not point at localhost in production");
+  });
+
+  it("rejects local TURN endpoints in production", () => {
+    expect(
+      configError({
+        ...productionTurnEnv,
         TURN_URLS: "turn:localhost:3478?transport=udp",
       }).issues.join("\n"),
     ).toContain("TURN_URLS must not point at localhost in production");
@@ -279,7 +342,7 @@ describe("production configuration", () => {
     ],
     ["TURN_REALM", "chat.local", "TURN test credentials must not be used in production"],
   ])("rejects %s=%s in production", (key, value, expectedMessage) => {
-    const error = configError({ ...productionEnv, [key]: value });
+    const error = configError({ ...productionTurnEnv, [key]: value });
 
     expect(error.issues.join("\n")).toContain(expectedMessage);
   });
@@ -298,6 +361,26 @@ describe("describeConfig", () => {
     expect(JSON.stringify(summary)).not.toContain("dev-only-not-a-secret");
   });
 
+  it("summarizes optional TURN configuration without credentials", () => {
+    const config = load({
+      TURN_URLS: "turn:turn.example.com:3478",
+      TURN_USERNAME: "turn-user",
+      TURN_CREDENTIAL: "turn-secret",
+      TURN_REALM: "chat.example.com",
+    });
+    const summary = describeConfig(config);
+
+    expect(summary.ice).toEqual({
+      stunUrls: ["stun:localhost:3478"],
+      turnConfigured: true,
+      turnUrls: ["turn:turn.example.com:3478"],
+      turnRealm: "chat.example.com",
+      turnCredentialTtlSeconds: 7200,
+    });
+    expect(JSON.stringify(summary)).not.toContain("turn-user");
+    expect(JSON.stringify(summary)).not.toContain("turn-secret");
+  });
+
   it("handles an empty secret and an unparseable host", () => {
     const config = load();
     const summary = describeConfig({
@@ -314,6 +397,30 @@ describe("describeConfig", () => {
     const summary = describeConfig(load());
 
     expect(summary.mongodb.host).toBe("127.0.0.1:27017");
+  });
+});
+
+describe("buildIceServers", () => {
+  it("returns STUN only by default", () => {
+    expect(buildIceServers(load())).toEqual([{ urls: ["stun:localhost:3478"] }]);
+  });
+
+  it("adds TURN when TURN_URLS is configured", () => {
+    const config = load({
+      TURN_URLS: "turn:turn.example.com:3478",
+      TURN_USERNAME: "turn-user",
+      TURN_CREDENTIAL: "turn-secret",
+      TURN_REALM: "chat.example.com",
+    });
+
+    expect(buildIceServers(config)).toEqual([
+      { urls: ["stun:localhost:3478"] },
+      {
+        urls: ["turn:turn.example.com:3478"],
+        username: "turn-user",
+        credential: "turn-secret",
+      },
+    ]);
   });
 });
 
