@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "name": "v0001_initial",
+  "schemaVersion": 1,
+  "description": "Initial v0 schema: app-owned collections and indexes per docs/data-durability-contracts.md §9; Better Auth collections library-managed.",
+  "rollback": "No destructive rollback for v0. Indexes are additive; drop-by-name only in a tested maintenance window with backup/restore plan.",
+  "releaseGatedFields": [
+    "pairKey encoding",
+    "payloadHash canonicalization",
+    "protocolVersion allowlist",
+    "encryptedEnvelope bounds (DEC-016)",
+    "call schema fields (DEC-022)",
+    "locale/timeZone profile storage"
+  ]
+}

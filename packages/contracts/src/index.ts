@@ -55,3 +55,5 @@ export interface HealthResponse {
   service: "api";
   contractsVersion: string;
 }
+
+export { dataCollections, pageBounds, releaseGatedFields, schemaVersion } from "./data-schema.js";

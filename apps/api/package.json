@@ -11,6 +11,7 @@
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "config:check": "tsx src/dev/check-config.ts",
     "db:check": "tsx src/dev/db-check.ts",
+    "db:migrate": "tsx src/db/migrate-cli.ts",
     "seed": "tsx src/dev/seed.ts",
     "smoke:ai": "tsx src/dev/smoke-ai.ts"
   },
