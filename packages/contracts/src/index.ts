@@ -57,3 +57,33 @@ export interface HealthResponse {
 }
 
 export { dataCollections, pageBounds, releaseGatedFields, schemaVersion } from "./data-schema.js";
+
+export {
+  BODY_MAX_BYTES,
+  ENVELOPE_MAX_BYTES,
+  ERROR_HTTP_STATUS,
+  PAGE_DEFAULT,
+  PAGE_MAX,
+  SCHEMA_VERSION,
+  SOCKET_EVENTS,
+  checkSchemaVersion,
+  decodeCursor,
+  encodeCursor,
+  failureEnvelope,
+  isRequestId,
+  newRequestId,
+  successEnvelope,
+  validateHistoryQuery,
+  validatePageLimit,
+  validateSendMessageRequest,
+  validateSocketPayload,
+  type Cursor,
+  type Envelope,
+  type FailureEnvelope,
+  type HistoryQuery,
+  type PageBounds,
+  type SocketEvent,
+  type SocketPayload,
+  type SuccessEnvelope,
+  type ValidationResult,
+} from "./v0.js";
