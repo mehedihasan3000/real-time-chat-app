@@ -87,3 +87,20 @@ export {
   type SuccessEnvelope,
   type ValidationResult,
 } from "./v0.js";
+
+export {
+  FRESH_SESSION_SECONDS,
+  JWT_LIFETIME_SECONDS,
+  PASSWORD_MAX,
+  PASSWORD_MIN,
+  RECOVERY_ADMIN_BYPASS,
+  RECOVERY_EMAIL_ONLY,
+  RECOVERY_SMS_ENABLED,
+  SESSION_ABSOLUTE_DAYS,
+  SESSION_CACHE_SECONDS,
+  SESSION_DEFAULT_DAYS,
+  SESSION_REMEMBER_DAYS,
+  exceedsAbsoluteCap,
+  isFreshSession,
+  validatePassword,
+} from "./auth-v0.js";
