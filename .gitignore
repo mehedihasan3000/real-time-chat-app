@@ -41,6 +41,9 @@ backups/
 backup/
 dumps/
 
+# Local error-context scratch file — never committed (pasted diagnostics only)
+ERROR.md
+
 # Logs
 *.log
 npm-debug.log*
