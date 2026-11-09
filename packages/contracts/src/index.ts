@@ -120,6 +120,30 @@ export {
 } from "./socket-v0.js";
 
 export {
+  APPEAL_WINDOW_DAYS,
+  BLOCK_MAX,
+  DISPOSITIONS,
+  EXCERPT_CODEPOINT_MAX,
+  REPORTS_PER_DAY,
+  REPORT_DEDUPE_HOURS,
+  REPORT_EXCERPTS_MAX,
+  REPORT_REFERENCES_MAX,
+  REPORT_STATUSES,
+  REPORT_TTL_DAYS,
+  reportExpiresAt,
+  validateBlockCreate,
+  validateDisposition,
+  validateReportCreate,
+  type AppealRecord,
+  type AuditEntry,
+  type BlockRecord,
+  type Disposition,
+  type ReportCreateInput,
+  type ReportRecord,
+  type ReportStatus,
+} from "./moderation-v0.js";
+
+export {
   DISPLAY_NAME_MAX,
   DISPLAY_NAME_MIN,
   PROFILE_PUBLIC_FIELDS,

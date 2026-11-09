@@ -38,6 +38,8 @@ export interface CreateAppOptions {
   keyBackupLookup?: ResourceLookup<KeyBackupResource>;
   profileStore?: import("./profiles/store.js").ProfileStore;
   isBlocked?: import("./profiles/store.js").BlockPredicate;
+  blockStore?: import("./blocks/store.js").BlockStore;
+  reportStore?: import("./reports/store.js").ReportStore;
   metrics?: import("./observability/index.js").MetricsRegistry;
 }
 
@@ -89,6 +91,8 @@ export function createApp(options: CreateAppOptions = {}): Express {
     keyBackupLookup: options.keyBackupLookup,
     profileStore: options.profileStore,
     isBlocked: options.isBlocked,
+    blockStore: options.blockStore,
+    reportStore: options.reportStore,
     metrics,
   });
   app.use("/api/v1", apiRouter);

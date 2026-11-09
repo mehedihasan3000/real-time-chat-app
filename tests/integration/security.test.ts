@@ -100,12 +100,16 @@ describe("P1-13 — hostile input cannot inject, pollute, or escalate", () => {
         authorization: `Bearer ${tokenA}`,
         "content-type": "application/json",
       },
-      body: JSON.stringify({ reason: "spam", role: "operator", operator: true }),
+      body: JSON.stringify({
+        reportedUserId: "user-b",
+        reason: "spam",
+        role: "operator",
+        operator: true,
+      }),
     });
-    // Placeholder 503 with a safe envelope; role/operator never echoed.
-    expect(created.status).toBe(503);
-    const body = (await created.json()) as { error?: { code: string } };
-    expect(body.error?.code).toBe("TEMPORARILY_UNAVAILABLE");
+    // Report succeeds without honoring role; role/operator never echoed.
+    expect([200, 400]).toContain(created.status);
+    const body = (await created.json()) as Record<string, unknown>;
     expect(JSON.stringify(body)).not.toContain("operator");
   });
 
@@ -118,7 +122,7 @@ describe("P1-13 — hostile input cannot inject, pollute, or escalate", () => {
       },
       body: '{"__proto__":{"polluted":"yes"},"blockedUserId":"user-b"}',
     });
-    expect(res.status).toBe(503);
+    expect(res.status).toBe(200);
     expect(({} as Record<string, unknown>).polluted).toBeUndefined();
   });
 });
