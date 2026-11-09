@@ -1,9 +1,14 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
+// `docs/` is git-excluded (local-only), so CI cannot read the local
+// runbooks/ADR files. Those assertions run locally and skip in CI;
+// the README surface (tracked) is always asserted.
+const hasLocalDocs = existsSync("docs/runbooks/README.md");
+
 describe("P1-16 — runbook skeleton covers setup, rollback, incident, key loss", () => {
-  it("runbooks index links every operator runbook", () => {
+  it.skipIf(!hasLocalDocs)("runbooks index links every operator runbook", () => {
     const index = readFileSync("docs/runbooks/README.md", "utf8");
     for (const file of [
       "staging-deployment.md",
@@ -17,14 +22,14 @@ describe("P1-16 — runbook skeleton covers setup, rollback, incident, key loss"
     }
   });
 
-  it("rollback runbook covers redeploy + re-smoke", () => {
+  it.skipIf(!hasLocalDocs)("rollback runbook covers redeploy + re-smoke", () => {
     const text = readFileSync("docs/runbooks/rollback.md", "utf8");
     expect(text).toContain("Roll back");
     expect(text).toContain("Re-run smokes");
     expect(text).toContain("/health");
   });
 
-  it("incident runbook covers connection, database, AI, and relay", () => {
+  it.skipIf(!hasLocalDocs)("incident runbook covers connection, database, AI, and relay", () => {
     const text = readFileSync("docs/runbooks/incident.md", "utf8");
     for (const phrase of [
       "Connection failures",
@@ -36,7 +41,7 @@ describe("P1-16 — runbook skeleton covers setup, rollback, incident, key loss"
     }
   });
 
-  it("key-loss runbook never offers a server backdoor", () => {
+  it.skipIf(!hasLocalDocs)("key-loss runbook never offers a server backdoor", () => {
     const text = readFileSync("docs/runbooks/key-loss.md", "utf8");
     expect(text).toContain("Never offer password-reset-as-recovery");
     expect(text).toContain("256-bit recovery key");
@@ -49,7 +54,7 @@ describe("P1-16 — runbook skeleton covers setup, rollback, incident, key loss"
     expect(readme).toContain("rollback.md");
   });
 
-  it("ADR index covers all 28 decisions (trace)", () => {
+  it.skipIf(!existsSync("docs/adr/README.md"))("ADR index covers all 28 decisions (trace)", () => {
     const index = readFileSync("docs/adr/README.md", "utf8");
     for (let n = 1; n <= 28; n += 1) {
       const id = `DEC-${String(n).padStart(3, "0")}`;
