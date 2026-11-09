@@ -20,6 +20,10 @@ import type {
 } from "./authz/index.js";
 import { createApiRouter } from "./routes/index.js";
 import { meHandler } from "./routes/me.js";
+import { correlationMiddleware } from "./observability/correlation.js";
+import { MetricsRegistry } from "./observability/metrics.js";
+import { createLogger } from "./observability/logger.js";
+import { toSafeError } from "./observability/safe-error.js";
 
 export interface CreateAppOptions {
   /** Injected by tests/staging wiring. Absent → protected routes fail closed (401). */
@@ -30,6 +34,7 @@ export interface CreateAppOptions {
   callLookup?: ResourceLookup<CallResource>;
   deviceLookup?: ResourceLookup<DeviceResource>;
   keyBackupLookup?: ResourceLookup<KeyBackupResource>;
+  metrics?: import("./observability/index.js").MetricsRegistry;
 }
 
 const DENY_VERIFIER = (async (): Promise<never> => {
@@ -46,8 +51,11 @@ const DENY_SESSION: SessionLookup = async () => null;
  */
 export function createApp(options: CreateAppOptions = {}): Express {
   const app = express();
+  const metrics = options.metrics ?? new MetricsRegistry();
+  const logger = createLogger();
 
   app.disable("x-powered-by");
+  app.use(correlationMiddleware(metrics, logger));
   app.use(express.json({ limit: `${BODY_MAX_BYTES}b` }));
 
   app.get("/health", (_request: Request, response: Response) => {
@@ -68,6 +76,7 @@ export function createApp(options: CreateAppOptions = {}): Express {
     callLookup: options.callLookup,
     deviceLookup: options.deviceLookup,
     keyBackupLookup: options.keyBackupLookup,
+    metrics,
   });
   app.use("/api/v1", apiRouter);
   // `/api/me` alias (scope) → same principal-derived handler as /api/v1/me.
@@ -79,10 +88,21 @@ export function createApp(options: CreateAppOptions = {}): Express {
   );
 
   app.use((_request: Request, response: Response) => {
-    response.status(404).json(failureEnvelope("NOT_FOUND", "Resource not found.", false));
+    response
+      .status(404)
+      .json(
+        failureEnvelope(
+          "NOT_FOUND",
+          "Resource not found.",
+          false,
+          (_request as { requestId?: string }).requestId,
+        ),
+      );
   });
 
-  app.use((error: unknown, _request: Request, response: Response, next: NextFunction) => {
+  app.use((error: unknown, request: Request, response: Response, _next: NextFunction) => {
+    void _next;
+    const requestId = (request as { requestId?: string }).requestId;
     if (
       typeof error === "object" &&
       error !== null &&
@@ -90,16 +110,22 @@ export function createApp(options: CreateAppOptions = {}): Express {
     ) {
       response
         .status(413)
-        .json(failureEnvelope("PAYLOAD_TOO_LARGE", "Request body is too large.", false));
+        .json(failureEnvelope("PAYLOAD_TOO_LARGE", "Request body is too large.", false, requestId));
       return;
     }
     if (error instanceof SyntaxError) {
       response
         .status(400)
-        .json(failureEnvelope("INVALID_REQUEST", "Request body must be valid JSON.", false));
+        .json(
+          failureEnvelope("INVALID_REQUEST", "Request body must be valid JSON.", false, requestId),
+        );
       return;
     }
-    next(error);
+    // Unknown throwables map to a safe INTERNAL_ERROR envelope (ERR-001).
+    // Raw messages, stacks, secrets, and provider text never leak.
+    const safe = toSafeError(error, requestId);
+    logger.error("http", { requestId, code: safe.error.code, status: 500 });
+    response.status(500).json(safe);
   });
 
   return app;
