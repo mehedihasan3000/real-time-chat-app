@@ -120,6 +120,22 @@ export {
 } from "./socket-v0.js";
 
 export {
+  DISPLAY_NAME_MAX,
+  DISPLAY_NAME_MIN,
+  PROFILE_PUBLIC_FIELDS,
+  RESERVED_USERNAMES,
+  USERNAME_MAX,
+  USERNAME_MIN,
+  generatedAvatar,
+  normalizeUsername,
+  validateDisplayName,
+  validateUsername,
+  type GeneratedAvatar,
+  type ProfileResponse,
+  type PublicProfile,
+} from "./profiles-v0.js";
+
+export {
   AI_FEATURES,
   PLACEHOLDER_MESSAGE,
   PUBLIC_FIELDS,

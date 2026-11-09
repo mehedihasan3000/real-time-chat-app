@@ -4,8 +4,10 @@ import {
   failureEnvelope,
   successEnvelope,
   validateDiscoveryUsername,
+  validateDisplayName,
   validateHistoryQuery,
   validateReportReason,
+  validateUsername,
 } from "@chat/contracts";
 
 import { requireAuth } from "../auth/middleware.js";
@@ -37,6 +39,7 @@ import type {
 import { sendEmptyList, sendPlaceholder, sendValidationFailure } from "./placeholder.js";
 import type { MetricsRegistry } from "../observability/index.js";
 import { guardOperator } from "../authz/index.js";
+import { MemoryProfileStore, type BlockPredicate, type ProfileStore } from "../profiles/store.js";
 
 /**
  * API skeleton v0 (P1-08, INT-001/INT-002, ERR-001, OPS-010).
@@ -57,6 +60,8 @@ export interface ApiRouterOptions {
   deviceLookup?: ResourceLookup<DeviceResource>;
   keyBackupLookup?: ResourceLookup<KeyBackupResource>;
   metrics?: MetricsRegistry;
+  profileStore?: ProfileStore;
+  isBlocked?: BlockPredicate;
 }
 
 const denyNullConversation: ResourceLookup<ConversationResource> = async () => null;
@@ -80,6 +85,8 @@ export function createApiRouter(options: ApiRouterOptions): Router {
     callLookup = denyNullCall,
     deviceLookup = denyNullDevice,
     keyBackupLookup = denyNullBackup,
+    profileStore = new MemoryProfileStore(),
+    isBlocked = async () => false,
   } = options;
 
   const auth = requireAuth(verifier);
@@ -104,17 +111,96 @@ export function createApiRouter(options: ApiRouterOptions): Router {
   // Me (INT-002): principal-derived only. No email, token, or session secret.
   router.get("/me", auth, read, meHandler);
 
+  // Profiles (P1-17, FR-PROF-001/002): own profile + username claim.
+  // The userId always comes from the server principal — client-supplied
+  // requester IDs are never trusted (INT-002).
+  router.get("/profiles/me", auth, read, async (request: PrincipalRequest, response: Response) => {
+    if (principalOrDenial(request, response)) return;
+    const profile = await profileStore.getByUserId(request.principal?.userId ?? "");
+    if (!profile) {
+      response.status(404).json(failureEnvelope("NOT_FOUND", "Profile not found.", false));
+      return;
+    }
+    response.status(200).json(successEnvelope(profile));
+  });
+  router.patch(
+    "/profiles/me",
+    auth,
+    sensitive,
+    async (request: PrincipalRequest, response: Response) => {
+      if (principalOrDenial(request, response)) return;
+      const body = (request.body ?? {}) as Record<string, unknown>;
+      const validated = validateDisplayName(body.displayName);
+      if (!validated.ok) {
+        sendValidationFailure(response, validated);
+        return;
+      }
+      const updated = await profileStore.updateDisplayName(
+        request.principal?.userId ?? "",
+        validated.value,
+      );
+      if (!updated) {
+        response.status(404).json(failureEnvelope("NOT_FOUND", "Profile not found.", false));
+        return;
+      }
+      response.status(200).json(successEnvelope(updated));
+    },
+  );
+  router.post(
+    "/profiles/username",
+    auth,
+    sensitive,
+    async (request: PrincipalRequest, response: Response) => {
+      if (principalOrDenial(request, response)) return;
+      const body = (request.body ?? {}) as Record<string, unknown>;
+      const validated = validateUsername(body.username);
+      if (!validated.ok) {
+        sendValidationFailure(response, validated);
+        return;
+      }
+      const claimed = await profileStore.claimUsername(
+        request.principal?.userId ?? "",
+        validated.value,
+      );
+      if (!claimed) {
+        response
+          .status(409)
+          .json(failureEnvelope("IDEMPOTENCY_CONFLICT", "Username is unavailable.", false));
+        return;
+      }
+      response.status(200).json(successEnvelope(claimed));
+    },
+  );
+
   // Discovery (FR-PROF-004 / DEC-020): exact normalized username only.
-  // v0 store is empty by default → neutral no-result; blocked users omitted
-  // by construction (nothing is listed). No prefix/email lookup exists.
-  router.get("/discovery", auth, read, (request: PrincipalRequest, response: Response) => {
+  // Blocked pairs are omitted; nonexistent usernames get the same neutral
+  // empty result. No prefix/email lookup exists.
+  router.get("/discovery", auth, read, async (request: PrincipalRequest, response: Response) => {
     if (principalOrDenial(request, response)) return;
     const username = validateDiscoveryUsername(request.query.username);
     if (!username.ok) {
       sendValidationFailure(response, username);
       return;
     }
-    sendEmptyList(response, { items: [] });
+    const found = await profileStore.getByUsername(username.value);
+    if (!found || found.userId === request.principal?.userId) {
+      sendEmptyList(response, { items: [] });
+      return;
+    }
+    if (await isBlocked(request.principal?.userId ?? "", found.userId)) {
+      sendEmptyList(response, { items: [] });
+      return;
+    }
+    sendEmptyList(response, {
+      items: [
+        {
+          userId: found.userId,
+          username: found.username,
+          displayName: found.displayName,
+          avatar: null,
+        },
+      ],
+    });
   });
 
   // Conversations (FR-HIST-001 + DEC-023 §9.1).
