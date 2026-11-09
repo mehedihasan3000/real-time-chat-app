@@ -16,8 +16,44 @@ const nextConfig: NextConfig = {
   env: {
     NEXT_PUBLIC_API_ORIGIN: apiOrigin,
   },
+  // Web client hardening (P1-13, FR-SEC-025): restrictive CSP with exact
+  // API connect origin, no third-party scripts, no framing.
+  async headers() {
+    return [
+      {
+        source: "/(.*)",
+        headers: [
+          {
+            key: "Content-Security-Policy",
+            value: buildWebCsp(apiOrigin),
+          },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
+          { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
+        ],
+      },
+    ];
+  },
 };
 export default nextConfig;
+
+function buildWebCsp(apiOrigin: string): string {
+  return (
+    [
+      `default-src 'self'`,
+      `base-uri 'self'`,
+      `frame-ancestors 'none'`,
+      `form-action 'self'`,
+      `object-src 'none'`,
+      `img-src 'self' data:`,
+      `script-src 'self' 'unsafe-inline'`,
+      `style-src 'self' 'unsafe-inline'`,
+      `connect-src 'self' ${apiOrigin}`,
+    ].join("; ") + ";"
+  );
+}
 
 function parseApiOrigin(value: string): string {
   let parsed: URL;
