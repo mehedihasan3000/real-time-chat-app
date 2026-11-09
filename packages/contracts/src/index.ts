@@ -106,6 +106,20 @@ export {
 } from "./auth-v0.js";
 
 export {
+  CONNECTION_LIMIT_PER_MINUTE,
+  REFRESH_MAX_INTERVAL_MS,
+  SOCKET_CLIENT_EVENTS,
+  SOCKET_ERROR,
+  SOCKET_EVENT_LIMIT_PER_MINUTE,
+  SOCKET_NAMESPACE,
+  SOCKET_SESSION_EXPIRED,
+  TYPING_COALESCE_MS,
+  conversationRoom,
+  userRoom,
+  type SocketClientEvent,
+} from "./socket-v0.js";
+
+export {
   AI_FEATURES,
   PLACEHOLDER_MESSAGE,
   PUBLIC_FIELDS,

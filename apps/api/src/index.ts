@@ -6,6 +6,8 @@ import {
   loadRootEnvFile,
   type AppConfig,
 } from "./config.js";
+import { createVerifier } from "./auth/jwt.js";
+import { createSocketServer } from "./socket/index.js";
 
 loadRootEnvFile();
 
@@ -17,6 +19,22 @@ const server = app.listen(config.port, () => {
   console.log(
     `API listening on http://localhost:${config.port} (env=${summary.nodeEnv}, db=${summary.mongodb.dbName}, ai=${summary.ai.provider})`,
   );
+});
+
+// Socket.IO foundation (P1-09) on the same HTTP server (`/v1` namespace).
+// JWKS/session wiring fails closed until staging provides real endpoints
+// (GAP-09-01); the allowed origin is the exact frontend origin only.
+const socketVerifier = createVerifier({
+  appOrigin: config.appOrigin,
+  apiOrigin: config.apiOrigin,
+});
+createSocketServer(server, {
+  verifier: socketVerifier,
+  sessionLookup: async () => null,
+  authorizer: {
+    conversationLookup: async () => null,
+  },
+  allowedOrigins: [config.appOrigin],
 });
 
 function loadRequiredConfig(): AppConfig {
