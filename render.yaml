@@ -47,6 +47,10 @@ services:
       # Generate a staging-only 32-byte base64 secret; never reuse local values.
       - key: BETTER_AUTH_SECRET
         sync: false
+      # Better Auth JWKS endpoint on the web origin (P1-06/P1-09).
+      # Empty fails closed; set after the Vercel deployment exists.
+      - key: JWKS_URI
+        sync: false
       - key: AI_PROVIDER
         value: groq
       - key: AI_MODEL

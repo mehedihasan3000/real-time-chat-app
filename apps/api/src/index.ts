@@ -12,7 +12,14 @@ import { createSocketServer } from "./socket/index.js";
 loadRootEnvFile();
 
 const config = loadRequiredConfig();
-const app = createApp();
+// Deployment skeleton (P1-15): the HTTP API and the socket server share
+// the same JWKS verifier so staging auth behaves identically.
+const verifier = createVerifier({
+  appOrigin: config.appOrigin,
+  apiOrigin: config.apiOrigin,
+  ...(config.auth.jwksUri ? { jwksUri: config.auth.jwksUri } : {}),
+});
+const app = createApp({ verifier });
 
 const server = app.listen(config.port, () => {
   const summary = describeConfig(config);
@@ -22,12 +29,12 @@ const server = app.listen(config.port, () => {
 });
 
 // Socket.IO foundation (P1-09) on the same HTTP server (`/v1` namespace).
-// JWKS/session wiring fails closed until staging provides real endpoints
-// (GAP-09-01); the allowed origin is the exact frontend origin only.
-const socketVerifier = createVerifier({
-  appOrigin: config.appOrigin,
-  apiOrigin: config.apiOrigin,
-});
+// JWKS is wired when `JWKS_URI` is set (staging provides the Better Auth
+// JWKS endpoint); otherwise verification fails closed. Session/member
+// stores fail closed until Mongo wiring lands (GAP-09-01/GAP-15-02);
+// the allowed origin is the exact frontend origin only.
+// The socket verifier is the same JWKS verifier shared with the HTTP API.
+const socketVerifier = verifier;
 createSocketServer(server, {
   verifier: socketVerifier,
   sessionLookup: async () => null,

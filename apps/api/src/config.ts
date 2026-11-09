@@ -167,6 +167,8 @@ const envSchema = z
     BETTER_AUTH_SECRET: z
       .string({ error: "BETTER_AUTH_SECRET is required" })
       .min(32, "BETTER_AUTH_SECRET must be at least 32 characters"),
+    /** Better Auth JWKS endpoint (app origin). Empty → fail closed. */
+    JWKS_URI: z.string().trim().default(""),
     AI_PROVIDER: z.enum(["mock", "groq"]).default("mock"),
     AI_MODEL: z.string().trim().min(1).default("mock"),
     AI_API_KEY: z.string().default(""),
@@ -223,6 +225,8 @@ export interface AppConfig {
   };
   auth: {
     secret: string;
+    /** Better Auth JWKS endpoint; empty/undefined → verification fails closed. */
+    jwksUri?: string;
   };
   ai: {
     provider: AiProviderName;
@@ -291,6 +295,7 @@ export function loadConfig(environment: NodeJS.ProcessEnv = process.env): AppCon
     },
     auth: {
       secret: result.data.BETTER_AUTH_SECRET,
+      jwksUri: result.data.JWKS_URI,
     },
     ai: {
       provider: result.data.AI_PROVIDER,
