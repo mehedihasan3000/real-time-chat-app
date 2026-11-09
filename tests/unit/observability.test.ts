@@ -57,7 +57,13 @@ describe("TC-ERR-001 — redaction removes synthetic secret/content markers", ()
     const fakeMongoUri = ["mongodb://", "u", ":", "p", "@host/db"].join("");
     const fakeBearer = ["Bearer ", "SYNTHETIC"].join("");
     const secretError = new Error(
-      ["failed with SYNTHETIC_TOKEN in ", fakeMongoUri, " ", fakeBearer, " at /app/src/secret.ts:42"].join(""),
+      [
+        "failed with SYNTHETIC_TOKEN in ",
+        fakeMongoUri,
+        " ",
+        fakeBearer,
+        " at /app/src/secret.ts:42",
+      ].join(""),
     );
     const safe = toSafeError(secretError, "11111111-1111-4111-8111-111111111111");
     expect(safe.error.code).toBe("INTERNAL_ERROR");
