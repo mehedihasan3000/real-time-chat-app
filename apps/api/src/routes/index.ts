@@ -35,6 +35,8 @@ import type {
   ResourceLookup,
 } from "../authz/index.js";
 import { sendEmptyList, sendPlaceholder, sendValidationFailure } from "./placeholder.js";
+import type { MetricsRegistry } from "../observability/index.js";
+import { guardOperator } from "../authz/index.js";
 
 /**
  * API skeleton v0 (P1-08, INT-001/INT-002, ERR-001, OPS-010).
@@ -54,6 +56,7 @@ export interface ApiRouterOptions {
   callLookup?: ResourceLookup<CallResource>;
   deviceLookup?: ResourceLookup<DeviceResource>;
   keyBackupLookup?: ResourceLookup<KeyBackupResource>;
+  metrics?: MetricsRegistry;
 }
 
 const denyNullConversation: ResourceLookup<ConversationResource> = async () => null;
@@ -87,6 +90,15 @@ export function createApiRouter(options: ApiRouterOptions): Router {
   // Readiness (OPS-010, public): no topology, credentials, or dependency detail.
   router.get("/ready", (_request: Request, response: Response) => {
     response.status(200).json(successEnvelope({ ready: true, service: "api" }));
+  });
+
+  // Operational metrics (OPS-011): operator-only aggregates, no content.
+  // Regular users receive 403; unauthenticated requests receive 401.
+  router.get("/metrics", auth, read, (request: PrincipalRequest, response: Response) => {
+    const gate = guardOperator(request.principal ?? null);
+    if (sendAuthzDenial(response, gate)) return;
+    const snapshot = options.metrics?.snapshot() ?? { counters: {}, durations: {} };
+    response.status(200).json(successEnvelope(snapshot as unknown as Record<string, unknown>));
   });
 
   // Me (INT-002): principal-derived only. No email, token, or session secret.
