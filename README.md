@@ -4,14 +4,36 @@ One-to-one real-time chat and audio/video calling web application.
 
 ## Status
 
-This repository is at the application-scaffold and UI-shell stage. The workspace, local build,
-typecheck, lint, environment validation, database check, synthetic seed, and AI mock are in
-place. Automated CI quality gates cover formatting, linting, typechecking, the build, unit,
-contract, integration, and browser end-to-end tests, a dependency audit, and a tracked-file
-secret scan. The web app now has a navigable shell for every MVP surface; the screens are static
-placeholders and do not call the API. Product features, security controls, capacity evidence,
-and accessibility verification land in later tasks. No security, capacity, or accessibility
-claim is made yet.
+This repository is at the Phase 1 secure-skeleton stage (33 tasks `Done`,
+`P1-16` in progress). The workspace, environments, CI gates, the data/schema
+v0 layer, shared contracts, Better-Auth JWT/JWKS (5-min, memory-only), the
+P1-07 authorization matrix, the `/api/v1` skeleton with P1-07 guards, the
+`/v1` Socket.IO foundation (exact-origin CORS, 5-min `auth:refresh`),
+observability (redacted logs, correlation IDs, operator metrics), the
+security baseline (headers, input validation), and the deployment skeleton
+are implemented and locally verified. Live email/Google delivery, live
+message/call fan-out, production data, and real-browser evidence land in
+later tasks and are recorded as gaps in `TASKS.md`. No production security,
+capacity, privacy/legal, or release claim is made.
+
+## Runbooks
+
+Operator runbooks live in `docs/runbooks/`. They are local/private and are
+written so a new operator can follow them without private knowledge and
+without accessing message plaintext (OPS-017).
+
+| Runbook                 | Covers                                             |
+| ----------------------- | -------------------------------------------------- |
+| `staging-deployment.md` | Staging deploy order, origin loop, vendor evidence |
+| `deploy.md`             | Deployment smoke, JWKS, origin/cookie wiring       |
+| `rollback.md`           | Failed-deploy rollback + forward repair            |
+| `incident.md`           | Connection, database, AI, and relay incidents      |
+| `key-loss.md`           | Key-loss support (recovery-key flow only)          |
+| `backup-restore.md`     | Encrypted dumps, restore drill, deletion replay    |
+
+Known limitations (live smokes, session/member stores, production domain/TLS,
+and the `DEC-017`/`DEC-025`/`DEC-026` gates) are listed in `TASKS.md` and the
+runbooks themselves.
 
 ## Requirements
 
