@@ -24,6 +24,8 @@ import { correlationMiddleware } from "./observability/correlation.js";
 import { MetricsRegistry } from "./observability/metrics.js";
 import { createLogger } from "./observability/logger.js";
 import { toSafeError } from "./observability/safe-error.js";
+import { securityHeadersMiddleware } from "./security/headers.js";
+import { stripProtoKeys } from "./security/input.js";
 
 export interface CreateAppOptions {
   /** Injected by tests/staging wiring. Absent → protected routes fail closed (401). */
@@ -55,8 +57,15 @@ export function createApp(options: CreateAppOptions = {}): Express {
   const logger = createLogger();
 
   app.disable("x-powered-by");
+  app.use(securityHeadersMiddleware);
   app.use(correlationMiddleware(metrics, logger));
   app.use(express.json({ limit: `${BODY_MAX_BYTES}b` }));
+  app.use((request: Request, _response: Response, next: NextFunction) => {
+    if (typeof request.body === "object" && request.body !== null) {
+      request.body = stripProtoKeys(request.body as Record<string, unknown>);
+    }
+    next();
+  });
 
   app.get("/health", (_request: Request, response: Response) => {
     const body: HealthResponse = {
