@@ -3,10 +3,13 @@ import { Router, type Request, type Response } from "express";
 import {
   failureEnvelope,
   successEnvelope,
+  validateBlockCreate,
   validateDiscoveryUsername,
   validateDisplayName,
+  validateDisposition,
   validateHistoryQuery,
-  validateReportReason,
+  validatePageLimit,
+  validateReportCreate,
   validateUsername,
 } from "@chat/contracts";
 
@@ -40,6 +43,14 @@ import { sendEmptyList, sendPlaceholder, sendValidationFailure } from "./placeho
 import type { MetricsRegistry } from "../observability/index.js";
 import { guardOperator } from "../authz/index.js";
 import { MemoryProfileStore, type BlockPredicate, type ProfileStore } from "../profiles/store.js";
+import { MemoryBlockStore, type BlockStore } from "../blocks/store.js";
+import {
+  MemoryReportStore,
+  operatorView,
+  reportedView,
+  reporterView,
+  type ReportStore,
+} from "../reports/store.js";
 
 /**
  * API skeleton v0 (P1-08, INT-001/INT-002, ERR-001, OPS-010).
@@ -62,6 +73,8 @@ export interface ApiRouterOptions {
   metrics?: MetricsRegistry;
   profileStore?: ProfileStore;
   isBlocked?: BlockPredicate;
+  blockStore?: BlockStore;
+  reportStore?: ReportStore;
 }
 
 const denyNullConversation: ResourceLookup<ConversationResource> = async () => null;
@@ -86,8 +99,11 @@ export function createApiRouter(options: ApiRouterOptions): Router {
     deviceLookup = denyNullDevice,
     keyBackupLookup = denyNullBackup,
     profileStore = new MemoryProfileStore(),
-    isBlocked = async () => false,
+    isBlocked,
+    blockStore = new MemoryBlockStore(),
+    reportStore = new MemoryReportStore(),
   } = options;
+  const blockedBetween: BlockPredicate = isBlocked ?? ((a, b) => blockStore.isBlocked(a, b));
 
   const auth = requireAuth(verifier);
   const sensitive = attachPrincipal(sessionLookup, roleLookup);
@@ -187,7 +203,7 @@ export function createApiRouter(options: ApiRouterOptions): Router {
       sendEmptyList(response, { items: [] });
       return;
     }
-    if (await isBlocked(request.principal?.userId ?? "", found.userId)) {
+    if (await blockedBetween(request.principal?.userId ?? "", found.userId)) {
       sendEmptyList(response, { items: [] });
       return;
     }
@@ -312,56 +328,166 @@ export function createApiRouter(options: ApiRouterOptions): Router {
     sendPlaceholder(response);
   });
 
-  // Blocks (DEC-008 §3/§6): own-list empty; create/delete are placeholders
-  // that cannot leak block state cross-user or mutate any store.
-  router.get("/blocks", auth, read, (request: PrincipalRequest, response: Response) => {
+  // Blocks (DEC-008 §3/§6/§7): private list, 50 max, silent to blocked user.
+  router.get("/blocks", auth, read, async (request: PrincipalRequest, response: Response) => {
     if (principalOrDenial(request, response)) return;
-    sendEmptyList(response, { items: [] });
-  });
-  router.post("/blocks", auth, sensitive, (request: PrincipalRequest, response: Response) => {
-    if (principalOrDenial(request, response)) return;
-    sendPlaceholder(response);
-  });
-  router.delete("/blocks/:id", auth, sensitive, (request: PrincipalRequest, response: Response) => {
-    if (principalOrDenial(request, response)) return;
-    sendPlaceholder(response);
-  });
-
-  // Reports/appeals (DEC-008 §4/§6): metadata-only in the skeleton.
-  // Excerpts/plaintext are rejected — no server-side decryption/scanning.
-  router.get("/reports", auth, read, (request: PrincipalRequest, response: Response) => {
-    if (principalOrDenial(request, response)) return;
-    sendEmptyList(response, { items: [] });
-  });
-  router.post("/reports", auth, sensitive, (request: PrincipalRequest, response: Response) => {
-    if (principalOrDenial(request, response)) return;
-    const body = (request.body ?? {}) as Record<string, unknown>;
-    const reason = validateReportReason(body.reason);
-    if (!reason.ok) {
-      sendValidationFailure(response, reason);
+    const limit = validatePageLimit(request.query.limit);
+    if (!limit.ok) {
+      sendValidationFailure(response, limit);
       return;
     }
-    if ("optionalExcerpts" in body && body.optionalExcerpts !== undefined) {
+    const items = await blockStore.list(request.principal?.userId ?? "", limit.value);
+    sendEmptyList(response, {
+      items: items.map((b) => ({ blockedUserId: b.blockedUserId })),
+    });
+  });
+  router.post("/blocks", auth, sensitive, async (request: PrincipalRequest, response: Response) => {
+    if (principalOrDenial(request, response)) return;
+    const validated = validateBlockCreate(request.body ?? {});
+    if (!validated.ok) {
+      sendValidationFailure(response, validated);
+      return;
+    }
+    const blocker = request.principal?.userId ?? "";
+    const result = await blockStore.create(blocker, validated.value.blockedUserId);
+    if (result === "SELF") {
       response
         .status(400)
-        .json(
-          failureEnvelope(
-            "INVALID_REQUEST",
-            "Report excerpts are not accepted in the skeleton.",
-            false,
-          ),
-        );
+        .json(failureEnvelope("INVALID_REQUEST", "You cannot block yourself.", false));
       return;
     }
-    sendPlaceholder(response);
+    if (result === "LIMIT") {
+      response.status(429).json(failureEnvelope("RATE_LIMITED", "Block limit reached.", false));
+      return;
+    }
+    response.status(200).json(successEnvelope({ blockedUserId: result.blockedUserId }));
   });
+  router.delete(
+    "/blocks/:id",
+    auth,
+    sensitive,
+    async (request: PrincipalRequest, response: Response) => {
+      if (principalOrDenial(request, response)) return;
+      await blockStore.remove(request.principal?.userId ?? "", request.params.id as string);
+      response.status(200).json(successEnvelope({ removed: true }));
+    },
+  );
+
+  // Reports/appeals (DEC-008 §4/§6/§7): metadata-only + consented excerpts.
+  // No server-side decryption/scanning; reporter identity never disclosed.
+  router.get("/reports", auth, read, async (request: PrincipalRequest, response: Response) => {
+    if (principalOrDenial(request, response)) return;
+    const items = await reportStore.listOwn(request.principal?.userId ?? "", 50);
+    sendEmptyList(response, { items: items.map(reporterView) });
+  });
+  router.post(
+    "/reports",
+    auth,
+    sensitive,
+    async (request: PrincipalRequest, response: Response) => {
+      if (principalOrDenial(request, response)) return;
+      const validated = validateReportCreate(request.body ?? {});
+      if (!validated.ok) {
+        sendValidationFailure(response, validated);
+        return;
+      }
+      const created = await reportStore.create(request.principal?.userId ?? "", validated.value);
+      if (!created.ok) {
+        if (created.code === "SELF") {
+          response
+            .status(400)
+            .json(failureEnvelope("INVALID_REQUEST", "You cannot report yourself.", false));
+          return;
+        }
+        if (created.code === "RATE_LIMITED") {
+          response
+            .status(429)
+            .json(failureEnvelope("RATE_LIMITED", "Daily report limit reached.", true));
+          return;
+        }
+        response
+          .status(409)
+          .json(
+            failureEnvelope("IDEMPOTENCY_CONFLICT", "Duplicate report within 24 hours.", false),
+          );
+        return;
+      }
+      response.status(200).json(successEnvelope(reporterView(created.record)));
+    },
+  );
   router.post(
     "/reports/:id/appeal",
     auth,
     sensitive,
-    (request: PrincipalRequest, response: Response) => {
+    async (request: PrincipalRequest, response: Response) => {
       if (principalOrDenial(request, response)) return;
-      sendPlaceholder(response);
+      const report = await reportStore.getById(request.params.id as string);
+      // Reports are invisible to anyone but the reporter; appeals are by
+      // the reported user against a disposition. All others get 404.
+      if (!report || report.reportedUserId !== request.principal?.userId) {
+        response.status(404).json(failureEnvelope("NOT_FOUND", "Resource not found.", false));
+        return;
+      }
+      const outcome = await reportStore.appeal(report.reportId, request.principal?.userId ?? "");
+      if (outcome === "OK") {
+        response
+          .status(200)
+          .json(
+            successEnvelope(reportedView((await reportStore.getById(report.reportId)) as never)),
+          );
+        return;
+      }
+      if (outcome === "NO_DISPOSITION") {
+        response
+          .status(400)
+          .json(failureEnvelope("INVALID_REQUEST", "No disposition to appeal.", false));
+        return;
+      }
+      if (outcome === "WINDOW") {
+        response
+          .status(400)
+          .json(failureEnvelope("INVALID_REQUEST", "Appeal window has closed.", false));
+        return;
+      }
+      response
+        .status(409)
+        .json(failureEnvelope("IDEMPOTENCY_CONFLICT", "Appeal already submitted.", false));
+    },
+  );
+
+  // Moderation queue (operator-only). Audit-trailed, no auto-disposition.
+  router.get(
+    "/moderation/queue",
+    auth,
+    read,
+    async (request: PrincipalRequest, response: Response) => {
+      const gate = guardOperator(request.principal ?? null);
+      if (sendAuthzDenial(response, gate)) return;
+      const items = await reportStore.queue(50);
+      sendEmptyList(response, { items: items.map(operatorView) });
+    },
+  );
+  router.post(
+    "/moderation/reports/:id/dispose",
+    auth,
+    sensitive,
+    async (request: PrincipalRequest, response: Response) => {
+      const gate = guardOperator(request.principal ?? null);
+      if (sendAuthzDenial(response, gate)) return;
+      const validated = validateDisposition((request.body ?? {}).disposition);
+      if (!validated.ok) {
+        sendValidationFailure(response, validated);
+        return;
+      }
+      const before = await reportStore.getById(request.params.id as string);
+      if (!before) {
+        response.status(404).json(failureEnvelope("NOT_FOUND", "Resource not found.", false));
+        return;
+      }
+      await reportStore.dispose(before.reportId, validated.value);
+      response
+        .status(200)
+        .json(successEnvelope(reportedView((await reportStore.getById(before.reportId)) as never)));
     },
   );
 

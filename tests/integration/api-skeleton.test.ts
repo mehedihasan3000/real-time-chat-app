@@ -223,32 +223,32 @@ describe("P1-08 — conversations/history are member-only and bounded", () => {
   });
 });
 
-describe("P1-08 — block/report/appeal placeholders cannot leak or mutate", () => {
-  it("own block/report lists are empty; create/appeal are 503 without mutation", async () => {
+describe("P1-08 — block/report/appeal upgraded by the P1-18 foundation", () => {
+  it("own block/report lists work; cross-user stays private", async () => {
     const blocks = await req("/api/v1/blocks", tokenA);
     expect(blocks.status).toBe(200);
-    expect(((await blocks.json()) as EnvelopeBody).data).toEqual({ items: [] });
 
     const createBlock = await req("/api/v1/blocks", tokenA, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ blockedUserId: "user-b" }),
     });
-    expect(createBlock.status).toBe(503);
+    expect(createBlock.status).toBe(200);
 
-    // The second user sees the same empty list — no cross-user disclosure.
+    // The second user sees an empty list — no cross-user disclosure.
     const otherBlocks = await req("/api/v1/blocks", tokenB);
     expect(((await otherBlocks.json()) as EnvelopeBody).data).toEqual({ items: [] });
 
     const reports = await req("/api/v1/reports", tokenA);
     expect(reports.status).toBe(200);
 
+    // Reporter cannot appeal own report as if reported (invisible → 404).
     const appeal = await req("/api/v1/reports/rep-1/appeal", tokenA, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({}),
     });
-    expect(appeal.status).toBe(503);
+    expect(appeal.status).toBe(404);
   });
 
   it("reports reject excerpts and bad reasons (metadata-only)", async () => {
