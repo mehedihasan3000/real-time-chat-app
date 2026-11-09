@@ -6,6 +6,9 @@ dist/
 build/
 coverage/
 reports/
+# Source exception: apps/api/src/reports holds the moderation store (not JUnit output).
+!apps/api/src/reports/
+!apps/api/src/reports/**
 .turbo/
 .cache/
 *.tsbuildinfo
