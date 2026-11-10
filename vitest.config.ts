@@ -4,11 +4,13 @@ import { defineConfig } from "vitest/config";
 const contractsSource = fileURLToPath(
   new URL("./packages/contracts/src/index.ts", import.meta.url),
 );
+const cryptoSource = fileURLToPath(new URL("./packages/crypto/src/index.ts", import.meta.url));
 
 export default defineConfig({
   resolve: {
     alias: {
       "@chat/contracts": contractsSource,
+      "@chat/crypto": cryptoSource,
     },
   },
   test: {

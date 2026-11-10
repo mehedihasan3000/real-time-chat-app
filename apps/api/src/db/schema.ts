@@ -46,6 +46,7 @@ export const RELEASE_GATED_FIELDS = [
   "encryptedEnvelope bounds (DEC-016)",
   "call schema fields (DEC-022)",
   "locale/timeZone profile storage",
+  "device key bundle fields (DEC-018; provisional dev-webcrypto-v0)",
 ] as const;
 
 export interface IndexSpec {
@@ -75,6 +76,7 @@ export const COLLECTIONS = [
   "ai_consent",
   "ai_requests",
   "deletion_journal",
+  "device_audit",
   "schema_migrations",
 ] as const;
 
@@ -99,6 +101,24 @@ export const INDEXES: IndexSpec[] = [
     collection: "devices",
     name: "device_active_lookup",
     key: { userId: 1, isActive: 1 },
+  },
+  {
+    collection: "devices",
+    name: "uniq_active_device_per_user",
+    key: { userId: 1 },
+    unique: true,
+    partialFilterExpression: { isActive: true },
+  },
+  // device audit (DEC-004: enrollment/replacement/revocation evidence; no keys)
+  {
+    collection: "device_audit",
+    name: "device_audit_user",
+    key: { userId: 1, at: -1 },
+  },
+  {
+    collection: "device_audit",
+    name: "device_audit_device",
+    key: { userId: 1, deviceId: 1, at: -1 },
   },
   // conversations (DEC-023 §9.1)
   { collection: "conversations", name: "uniq_pairKey", key: { pairKey: 1 }, unique: true },
