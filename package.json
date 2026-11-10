@@ -13,10 +13,10 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "npm run build -w @chat/contracts && concurrently -n web,api -c blue,green \"npm run dev -w @chat/web\" \"npm run dev -w @chat/api\"",
-    "build": "npm run build -w @chat/contracts && npm run build -w @chat/api && npm run build -w @chat/web",
+    "dev": "npm run build -w @chat/contracts && npm run build -w @chat/crypto && concurrently -n web,api -c blue,green \"npm run dev -w @chat/web\" \"npm run dev -w @chat/api\"",
+    "build": "npm run build -w @chat/contracts && npm run build -w @chat/crypto && npm run build -w @chat/api && npm run build -w @chat/web",
     "start": "concurrently -n web,api -c blue,green \"npm run start -w @chat/web\" \"npm run start -w @chat/api\"",
-    "typecheck": "npm run build -w @chat/contracts && npm run typecheck -w @chat/contracts && npm run typecheck -w @chat/api && npm run typecheck -w @chat/web && npm run typecheck:tests",
+    "typecheck": "npm run build -w @chat/contracts && npm run build -w @chat/crypto && npm run typecheck -w @chat/contracts && npm run typecheck -w @chat/crypto && npm run typecheck -w @chat/api && npm run typecheck -w @chat/web && npm run typecheck:tests",
     "typecheck:tests": "tsc -p tsconfig.tests.json --noEmit",
     "lint": "eslint .",
     "format": "prettier --write .",

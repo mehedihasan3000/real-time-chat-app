@@ -85,15 +85,8 @@ export interface CallListResponse {
 }
 
 /* ------------------------------ Device keys ------------------------------ */
-
-export interface DeviceSummary {
-  deviceId: string;
-  isActive: boolean;
-}
-
-export interface DeviceListResponse {
-  items: DeviceSummary[];
-}
+// Device directory shapes live in `device-keys-v0.ts` (P2-01); the skeleton
+// only keeps the documented allowlists below.
 
 /* ------------------------------- Key backup ------------------------------ */
 
@@ -170,7 +163,22 @@ export const PUBLIC_FIELDS = {
   callList: ["items"],
   callSummary: ["callId", "participantIds", "state"],
   deviceList: ["items"],
-  deviceSummary: ["deviceId", "isActive"],
+  deviceSummary: [
+    "deviceId",
+    "isActive",
+    "status",
+    "algorithm",
+    "createdAt",
+    "updatedAt",
+    "revokedAt",
+    "replacedByDeviceId",
+    "backupLinked",
+  ],
+  deviceKey: ["device", "backupLink"],
+  deviceDirectory: ["userId", "device"],
+  deviceEnrollment: ["device", "replacedDeviceId", "backupRequired"],
+  deviceRevocation: ["deviceId", "status", "revokedAt", "replacedByDeviceId"],
+  keyBackupLink: ["deviceId", "link"],
   keyBackupList: ["items"],
   keyBackupSummary: ["id"],
   blockList: ["items"],
