@@ -86,8 +86,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Build contracts and web
-        run: npm run build -w @chat/contracts && npm run build -w @chat/web
+      - name: Build contracts, crypto, and web
+        run: npm run build -w @chat/contracts && npm run build -w @chat/crypto && npm run build -w @chat/web
 
       - name: Install Chromium
         run: npx playwright install --with-deps chromium

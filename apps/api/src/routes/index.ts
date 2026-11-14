@@ -4,13 +4,22 @@ import {
   failureEnvelope,
   successEnvelope,
   validateBlockCreate,
+  validateDeviceEnrollmentRequest,
+  validateDeviceRevocationRequest,
   validateDiscoveryUsername,
   validateDisplayName,
   validateDisposition,
   validateHistoryQuery,
+  validateKeyBackupLinkRequest,
   validatePageLimit,
   validateReportCreate,
   validateUsername,
+  type DeviceEnrollmentResponse,
+  type DeviceKeyResponse,
+  type DeviceListResponse,
+  type DevicePublicKeysResponse,
+  type DeviceRevocationResponse,
+  type KeyBackupLinkResponse,
 } from "@chat/contracts";
 
 import { requireAuth } from "../auth/middleware.js";
@@ -25,9 +34,9 @@ import {
 import { meHandler } from "./me.js";
 import {
   canAccessCall,
-  canAccessDevice,
   canAccessKeyBackup,
   guardProtected,
+  guardSensitive,
   sendAuthzDenial,
   type AuthzResult,
 } from "../authz/index.js";
@@ -35,10 +44,15 @@ import type { RoleLookup } from "../authz/index.js";
 import type {
   CallResource,
   ConversationResource,
-  DeviceResource,
   KeyBackupResource,
   ResourceLookup,
 } from "../authz/index.js";
+import {
+  MemoryDeviceKeyStore,
+  deviceSummaryView,
+  ownerBundleView,
+  type DeviceKeyStore,
+} from "../keys/store.js";
 import { sendEmptyList, sendPlaceholder, sendValidationFailure } from "./placeholder.js";
 import type { MetricsRegistry } from "../observability/index.js";
 import { guardOperator } from "../authz/index.js";
@@ -68,8 +82,8 @@ export interface ApiRouterOptions {
   roleLookup?: RoleLookup;
   conversationLookup?: ResourceLookup<ConversationResource>;
   callLookup?: ResourceLookup<CallResource>;
-  deviceLookup?: ResourceLookup<DeviceResource>;
   keyBackupLookup?: ResourceLookup<KeyBackupResource>;
+  deviceKeyStore?: DeviceKeyStore;
   metrics?: MetricsRegistry;
   profileStore?: ProfileStore;
   isBlocked?: BlockPredicate;
@@ -79,13 +93,28 @@ export interface ApiRouterOptions {
 
 const denyNullConversation: ResourceLookup<ConversationResource> = async () => null;
 const denyNullCall: ResourceLookup<CallResource> = async () => null;
-const denyNullDevice: ResourceLookup<DeviceResource> = async () => null;
 const denyNullBackup: ResourceLookup<KeyBackupResource> = async () => null;
 
 function principalOrDenial(request: PrincipalRequest, response: Response): boolean {
   const result = guardProtected(request.principal ?? null);
   if (sendAuthzDenial(response, result)) return true;
   return false;
+}
+
+/** Sensitive actions additionally require a fresh session (DEC-019 §3.2). */
+function sensitiveOrDenial(request: PrincipalRequest, response: Response): boolean {
+  const result = guardSensitive(request.principal ?? null);
+  if (sendAuthzDenial(response, result)) return true;
+  return false;
+}
+
+function sendSafeError(
+  response: Response,
+  status: number,
+  code: Parameters<typeof failureEnvelope>[0],
+  message: string,
+): void {
+  response.status(status).json(failureEnvelope(code, message, false));
 }
 
 export function createApiRouter(options: ApiRouterOptions): Router {
@@ -96,8 +125,8 @@ export function createApiRouter(options: ApiRouterOptions): Router {
     roleLookup,
     conversationLookup = denyNullConversation,
     callLookup = denyNullCall,
-    deviceLookup = denyNullDevice,
     keyBackupLookup = denyNullBackup,
+    deviceKeyStore = new MemoryDeviceKeyStore(),
     profileStore = new MemoryProfileStore(),
     isBlocked,
     blockStore = new MemoryBlockStore(),
@@ -279,30 +308,199 @@ export function createApiRouter(options: ApiRouterOptions): Router {
     },
   );
 
-  // Device keys (DEC-002): owner-only; enrollment is sensitive (fresh session).
-  router.get("/devices", auth, read, (request: PrincipalRequest, response: Response) => {
+  // Device directory v0 (P2-01, DEC-002/DEC-004). All device routes are
+  // owner-scoped except the peer-visible public-key directory. Enrollment,
+  // replacement, revocation, and backup linkage are sensitive (fresh session).
+  router.get("/devices", auth, read, async (request: PrincipalRequest, response: Response) => {
     if (principalOrDenial(request, response)) return;
-    sendEmptyList(response, { items: [] });
+    const limit = validatePageLimit(request.query.limit);
+    if (!limit.ok) {
+      sendValidationFailure(response, limit);
+      return;
+    }
+    const records = await deviceKeyStore.listOwn(request.principal?.userId ?? "", limit.value);
+    const data: DeviceListResponse = { items: records.map(deviceSummaryView) };
+    response.status(200).json(successEnvelope(data));
   });
   router.get(
     "/devices/:id/keys",
     auth,
     read,
     async (request: PrincipalRequest, response: Response) => {
+      if (principalOrDenial(request, response)) return;
       const id = request.params.id as string | undefined;
-      const device = id ? await deviceLookup(id) : null;
-      const result: AuthzResult = canAccessDevice(request.principal ?? null, device);
-      if (sendAuthzDenial(response, result)) return;
-      sendEmptyList(response, { items: [] });
+      const record = id ? await deviceKeyStore.getOwn(request.principal?.userId ?? "", id) : null;
+      // A device owned by another user is indistinguishable from a missing
+      // device (uniform 404); the owner sees an explicit revoked state.
+      if (!record) {
+        sendSafeError(response, 404, "NOT_FOUND", "Resource not found.");
+        return;
+      }
+      if (record.status !== "active") {
+        sendSafeError(
+          response,
+          403,
+          "DEVICE_REVOKED",
+          "This device is revoked and has no published keys.",
+        );
+        return;
+      }
+      const data: DeviceKeyResponse = {
+        device: ownerBundleView(record),
+        backupLink: record.backupLink,
+      };
+      response.status(200).json(successEnvelope(data));
     },
   );
   router.post(
     "/devices/:id/keys",
     auth,
     sensitive,
-    (request: PrincipalRequest, response: Response) => {
+    async (request: PrincipalRequest, response: Response) => {
+      if (sensitiveOrDenial(request, response)) return;
+      const id = request.params.id as string | undefined;
+      const validated = validateDeviceEnrollmentRequest(request.body ?? {}, id);
+      if (!validated.ok) {
+        sendValidationFailure(response, validated);
+        return;
+      }
+      const result = await deviceKeyStore.enroll(
+        request.principal?.userId ?? "",
+        validated.value.bundle,
+        validated.value.replace,
+      );
+      if (!result.ok) {
+        if (result.code === "REPLACEMENT_REQUIRED" || result.code === "INVALID_REPLACEMENT") {
+          sendSafeError(
+            response,
+            409,
+            "DEVICE_REPLACEMENT_REQUIRED",
+            "An active device already exists; explicit restore or reset is required.",
+          );
+          return;
+        }
+        if (result.code === "IDENTITY_MISMATCH") {
+          sendSafeError(
+            response,
+            400,
+            "INVALID_REQUEST",
+            "The identity key cannot change for an active device.",
+          );
+          return;
+        }
+        sendSafeError(
+          response,
+          403,
+          "DEVICE_REVOKED",
+          "This device is revoked and cannot publish keys.",
+        );
+        return;
+      }
+      const data: DeviceEnrollmentResponse = {
+        device: ownerBundleView(result.record),
+        replacedDeviceId: result.replacedDeviceId,
+        backupRequired: true,
+      };
+      response.status(200).json(successEnvelope(data));
+    },
+  );
+  router.post(
+    "/devices/:id/revoke",
+    auth,
+    sensitive,
+    async (request: PrincipalRequest, response: Response) => {
+      if (sensitiveOrDenial(request, response)) return;
+      const id = request.params.id as string | undefined;
+      const validated = validateDeviceRevocationRequest(request.body ?? {});
+      if (!validated.ok) {
+        sendValidationFailure(response, validated);
+        return;
+      }
+      if (!id) {
+        sendSafeError(response, 404, "NOT_FOUND", "Resource not found.");
+        return;
+      }
+      const result = await deviceKeyStore.revoke(
+        request.principal?.userId ?? "",
+        id,
+        validated.value.reason,
+      );
+      if (!result.ok) {
+        sendSafeError(response, 404, "NOT_FOUND", "Resource not found.");
+        return;
+      }
+      const data: DeviceRevocationResponse = {
+        deviceId: result.record.deviceId,
+        status: result.record.status,
+        revokedAt: result.record.revokedAt ?? new Date().toISOString(),
+        replacedByDeviceId: result.record.replacedByDeviceId,
+      };
+      response.status(200).json(successEnvelope(data));
+    },
+  );
+  router.get(
+    "/devices/:userId/public-keys",
+    auth,
+    read,
+    async (request: PrincipalRequest, response: Response) => {
       if (principalOrDenial(request, response)) return;
-      sendPlaceholder(response);
+      const userId = request.params.userId as string | undefined;
+      if (!userId || userId.length > 128) {
+        sendSafeError(response, 404, "NOT_FOUND", "Resource not found.");
+        return;
+      }
+      const device = await deviceKeyStore.getActivePublicKeys(userId);
+      if (!device) {
+        // No active device and an unknown user share the same safe shape.
+        sendSafeError(response, 404, "NOT_FOUND", "Resource not found.");
+        return;
+      }
+      const data: DevicePublicKeysResponse = { userId, device };
+      response.status(200).json(successEnvelope(data));
+    },
+  );
+  router.post(
+    "/key-backups/link",
+    auth,
+    sensitive,
+    async (request: PrincipalRequest, response: Response) => {
+      if (sensitiveOrDenial(request, response)) return;
+      const validated = validateKeyBackupLinkRequest(request.body ?? {});
+      if (!validated.ok) {
+        sendValidationFailure(response, validated);
+        return;
+      }
+      const result = await deviceKeyStore.linkBackup(
+        request.principal?.userId ?? "",
+        validated.value,
+      );
+      if (!result.ok) {
+        if (result.code === "NOT_FOUND") {
+          sendSafeError(response, 404, "NOT_FOUND", "Resource not found.");
+          return;
+        }
+        if (result.code === "DEVICE_REVOKED") {
+          sendSafeError(
+            response,
+            403,
+            "DEVICE_REVOKED",
+            "A revoked device cannot link a key backup.",
+          );
+          return;
+        }
+        sendSafeError(
+          response,
+          409,
+          "IDEMPOTENCY_CONFLICT",
+          "That backup is already linked to another device.",
+        );
+        return;
+      }
+      const data: KeyBackupLinkResponse = {
+        deviceId: result.record.deviceId,
+        link: result.link,
+      };
+      response.status(200).json(successEnvelope(data));
     },
   );
 

@@ -14,7 +14,6 @@ import type { RoleLookup } from "./authz/index.js";
 import type {
   CallResource,
   ConversationResource,
-  DeviceResource,
   KeyBackupResource,
   ResourceLookup,
 } from "./authz/index.js";
@@ -34,8 +33,8 @@ export interface CreateAppOptions {
   roleLookup?: RoleLookup;
   conversationLookup?: ResourceLookup<ConversationResource>;
   callLookup?: ResourceLookup<CallResource>;
-  deviceLookup?: ResourceLookup<DeviceResource>;
   keyBackupLookup?: ResourceLookup<KeyBackupResource>;
+  deviceKeyStore?: import("./keys/store.js").DeviceKeyStore;
   profileStore?: import("./profiles/store.js").ProfileStore;
   isBlocked?: import("./profiles/store.js").BlockPredicate;
   blockStore?: import("./blocks/store.js").BlockStore;
@@ -87,8 +86,8 @@ export function createApp(options: CreateAppOptions = {}): Express {
     roleLookup: options.roleLookup,
     conversationLookup: options.conversationLookup,
     callLookup: options.callLookup,
-    deviceLookup: options.deviceLookup,
     keyBackupLookup: options.keyBackupLookup,
+    deviceKeyStore: options.deviceKeyStore,
     profileStore: options.profileStore,
     isBlocked: options.isBlocked,
     blockStore: options.blockStore,
