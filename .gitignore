@@ -4,6 +4,7 @@ node_modules/
 out/
 dist/
 build/
+target/
 coverage/
 reports/
 # Source exception: apps/api/src/reports holds the moderation store (not JUnit output).

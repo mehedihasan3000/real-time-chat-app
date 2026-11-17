@@ -14,7 +14,7 @@ import { checkSchemaVersion, type ValidationResult } from "./v0.js";
 
 export const DEVICE_KEY_SCHEMA_VERSION = 1;
 
-export const DEVICE_KEY_ALGORITHMS = ["dev-webcrypto-v0"] as const;
+export const DEVICE_KEY_ALGORITHMS = ["dev-webcrypto-v0", "olm-vodozemac-v1"] as const;
 export type DeviceKeyAlgorithm = (typeof DEVICE_KEY_ALGORITHMS)[number];
 
 /** Opaque client-generated device reference. */
