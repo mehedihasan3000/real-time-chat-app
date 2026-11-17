@@ -4,6 +4,8 @@ import {
   failureEnvelope,
   successEnvelope,
   validateBlockCreate,
+  validateConversationListQuery,
+  validateCreateConversationRequest,
   validateDeviceEnrollmentRequest,
   validateDeviceRevocationRequest,
   validateDiscoveryUsername,
@@ -14,6 +16,9 @@ import {
   validatePageLimit,
   validateReportCreate,
   validateUsername,
+  type ConversationCreateResponse,
+  type ConversationDetailResponse,
+  type ConversationListResponse,
   type DeviceEnrollmentResponse,
   type DeviceKeyResponse,
   type DeviceListResponse,
@@ -65,6 +70,15 @@ import {
   reporterView,
   type ReportStore,
 } from "../reports/store.js";
+import {
+  ConversationRateLimiter,
+  MemoryConversationStore,
+  checkConversationPairEligibility,
+  toConversationSummary,
+  type ConversationStore,
+  type UserEligibilityLookup,
+} from "../conversations/index.js";
+import { findOperatorKey } from "../security/input.js";
 
 /**
  * API skeleton v0 (P1-08, INT-001/INT-002, ERR-001, OPS-010).
@@ -81,6 +95,9 @@ export interface ApiRouterOptions {
   sessionLookup: SessionLookup;
   roleLookup?: RoleLookup;
   conversationLookup?: ResourceLookup<ConversationResource>;
+  conversationStore?: ConversationStore;
+  conversationRateLimiter?: ConversationRateLimiter;
+  userEligibilityLookup?: UserEligibilityLookup;
   callLookup?: ResourceLookup<CallResource>;
   keyBackupLookup?: ResourceLookup<KeyBackupResource>;
   deviceKeyStore?: DeviceKeyStore;
@@ -89,6 +106,7 @@ export interface ApiRouterOptions {
   isBlocked?: BlockPredicate;
   blockStore?: BlockStore;
   reportStore?: ReportStore;
+  now?: () => Date;
 }
 
 const denyNullConversation: ResourceLookup<ConversationResource> = async () => null;
@@ -124,6 +142,9 @@ export function createApiRouter(options: ApiRouterOptions): Router {
     sessionLookup,
     roleLookup,
     conversationLookup = denyNullConversation,
+    conversationStore = new MemoryConversationStore(),
+    conversationRateLimiter = new ConversationRateLimiter(),
+    userEligibilityLookup,
     callLookup = denyNullCall,
     keyBackupLookup = denyNullBackup,
     deviceKeyStore = new MemoryDeviceKeyStore(),
@@ -131,13 +152,22 @@ export function createApiRouter(options: ApiRouterOptions): Router {
     isBlocked,
     blockStore = new MemoryBlockStore(),
     reportStore = new MemoryReportStore(),
+    now = () => new Date(),
   } = options;
   const blockedBetween: BlockPredicate = isBlocked ?? ((a, b) => blockStore.isBlocked(a, b));
+  const effectiveConversationLookup: ResourceLookup<ConversationResource> = async (id: string) => {
+    const stored = await conversationStore.getById(id);
+    if (stored) return stored;
+    return conversationLookup(id);
+  };
 
   const auth = requireAuth(verifier);
-  const sensitive = attachPrincipal(sessionLookup, roleLookup);
-  const read = attachPrincipalForRead(sessionLookup, roleLookup);
-  const member = requireConversationMember({ conversationLookup, idField: "id" });
+  const sensitive = attachPrincipal(sessionLookup, roleLookup, now);
+  const read = attachPrincipalForRead(sessionLookup, roleLookup, now);
+  const member = requireConversationMember({
+    conversationLookup: effectiveConversationLookup,
+    idField: "id",
+  });
 
   // Readiness (OPS-010, public): no topology, credentials, or dependency detail.
   router.get("/ready", (_request: Request, response: Response) => {
@@ -248,18 +278,128 @@ export function createApiRouter(options: ApiRouterOptions): Router {
     });
   });
 
-  // Conversations (FR-HIST-001 + DEC-023 §9.1).
-  router.get("/conversations", auth, read, (request: PrincipalRequest, response: Response) => {
-    if (principalOrDenial(request, response)) return;
-    sendEmptyList(response, { items: [], nextCursor: null, hasMore: false });
-  });
+  // Conversations (P2-03, FR-CHAT-001, FR-HIST-001, FR-PRIV-003, DATA-002;
+  // DEC-008, DEC-016, DEC-020, DEC-023): one immutable direct conversation
+  // per participant pair, two distinct eligible participants, participant-only
+  // listing/retrieval, silent bilateral block enforcement.
+  router.get(
+    "/conversations",
+    auth,
+    read,
+    async (request: PrincipalRequest, response: Response) => {
+      if (principalOrDenial(request, response)) return;
+      if (findOperatorKey(request.query)) {
+        sendSafeError(response, 400, "INVALID_REQUEST", "Invalid query parameters.");
+        return;
+      }
+      const query = validateConversationListQuery(request.query as unknown);
+      if (!query.ok) {
+        sendValidationFailure(response, query);
+        return;
+      }
+      const requesterUserId = request.principal?.userId ?? "";
+      const list = await conversationStore.listForUser(requesterUserId, query.value);
+      const items = await Promise.all(
+        list.items.map((record) =>
+          toConversationSummary(record, requesterUserId, { profileStore, blockStore }),
+        ),
+      );
+      const data: ConversationListResponse = {
+        items,
+        nextCursor: list.nextCursor,
+        hasMore: list.hasMore,
+      };
+      response.status(200).json(successEnvelope(data));
+    },
+  );
+  router.get(
+    "/conversations/:id",
+    auth,
+    read,
+    member,
+    async (request: PrincipalRequest, response: Response) => {
+      if (principalOrDenial(request, response)) return;
+      const requesterUserId = request.principal?.userId ?? "";
+      const id = request.params.id as string | undefined;
+      const stored = id ? await conversationStore.getById(id) : null;
+      if (!stored || !stored.participantIds.includes(requesterUserId)) {
+        sendSafeError(response, 404, "NOT_FOUND", "Resource not found.");
+        return;
+      }
+      const conversation = await toConversationSummary(stored, requesterUserId, {
+        profileStore,
+        blockStore,
+      });
+      const data: ConversationDetailResponse = { conversation };
+      response.status(200).json(successEnvelope(data));
+    },
+  );
   router.post(
     "/conversations",
     auth,
     sensitive,
-    (request: PrincipalRequest, response: Response) => {
+    async (request: PrincipalRequest, response: Response) => {
       if (principalOrDenial(request, response)) return;
-      sendPlaceholder(response);
+      if (findOperatorKey(request.body)) {
+        sendSafeError(response, 400, "INVALID_REQUEST", "Invalid request body.");
+        return;
+      }
+      const validated = validateCreateConversationRequest(request.body ?? {});
+      if (!validated.ok) {
+        sendValidationFailure(response, validated);
+        return;
+      }
+      const requesterUserId = request.principal?.userId ?? "";
+      if (requesterUserId === validated.value.peerUserId) {
+        sendSafeError(
+          response,
+          400,
+          "INVALID_REQUEST",
+          "You cannot start a conversation with yourself.",
+        );
+        return;
+      }
+      const currentTime = now();
+      const limitCheck = conversationRateLimiter.consume(requesterUserId, currentTime);
+      if (!limitCheck.allowed) {
+        response.setHeader("Retry-After", String(limitCheck.retryAfterSeconds));
+        response
+          .status(429)
+          .json(failureEnvelope("RATE_LIMITED", "Conversation creation rate limit reached.", true));
+        return;
+      }
+      const eligibility = await checkConversationPairEligibility(
+        requesterUserId,
+        validated.value.peerUserId,
+        {
+          profileStore,
+          blockStore,
+          isBlocked,
+          userEligibilityLookup,
+        },
+      );
+      if (!eligibility.ok) {
+        if (eligibility.reason === "BLOCKED_BY_REQUESTER") {
+          sendSafeError(response, 403, "BLOCKED", "You have blocked this user.");
+          return;
+        }
+        sendSafeError(response, 404, "USER_UNAVAILABLE", "This user is unavailable.");
+        return;
+      }
+      const result = await conversationStore.upsertDirect(
+        requesterUserId,
+        validated.value.peerUserId,
+        currentTime,
+      );
+      const conversation = await toConversationSummary(result.conversation, requesterUserId, {
+        profileStore,
+        blockStore,
+      });
+      const data: ConversationCreateResponse = {
+        conversation,
+        created: result.created,
+      };
+      response.status(result.created ? 201 : 200).json(successEnvelope(data));
     },
   );
 

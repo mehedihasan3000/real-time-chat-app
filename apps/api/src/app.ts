@@ -32,6 +32,9 @@ export interface CreateAppOptions {
   sessionLookup?: SessionLookup;
   roleLookup?: RoleLookup;
   conversationLookup?: ResourceLookup<ConversationResource>;
+  conversationStore?: import("./conversations/store.js").ConversationStore;
+  conversationRateLimiter?: import("./conversations/rate-limit.js").ConversationRateLimiter;
+  userEligibilityLookup?: import("./conversations/view.js").UserEligibilityLookup;
   callLookup?: ResourceLookup<CallResource>;
   keyBackupLookup?: ResourceLookup<KeyBackupResource>;
   deviceKeyStore?: import("./keys/store.js").DeviceKeyStore;
@@ -40,6 +43,7 @@ export interface CreateAppOptions {
   blockStore?: import("./blocks/store.js").BlockStore;
   reportStore?: import("./reports/store.js").ReportStore;
   metrics?: import("./observability/index.js").MetricsRegistry;
+  now?: () => Date;
 }
 
 const DENY_VERIFIER = (async (): Promise<never> => {
@@ -85,6 +89,9 @@ export function createApp(options: CreateAppOptions = {}): Express {
     sessionLookup: options.sessionLookup ?? DENY_SESSION,
     roleLookup: options.roleLookup,
     conversationLookup: options.conversationLookup,
+    conversationStore: options.conversationStore,
+    conversationRateLimiter: options.conversationRateLimiter,
+    userEligibilityLookup: options.userEligibilityLookup,
     callLookup: options.callLookup,
     keyBackupLookup: options.keyBackupLookup,
     deviceKeyStore: options.deviceKeyStore,
@@ -93,6 +100,7 @@ export function createApp(options: CreateAppOptions = {}): Express {
     blockStore: options.blockStore,
     reportStore: options.reportStore,
     metrics,
+    now: options.now,
   });
   app.use("/api/v1", apiRouter);
   // `/api/me` alias (scope) → same principal-derived handler as /api/v1/me.
