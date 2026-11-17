@@ -48,18 +48,8 @@ export function validateDiscoveryUsername(value: unknown): ValidationResult<stri
 }
 
 /* ------------------------------ Conversations ---------------------------- */
-
-export interface ConversationSummary {
-  id: string;
-  participantIds: string[];
-  lastSeq: number;
-}
-
-export interface ConversationListResponse {
-  items: ConversationSummary[];
-  nextCursor: string | null;
-  hasMore: boolean;
-}
+// Conversation list/create/detail shapes live in `conversations-v0.ts` (P2-03);
+// keep `HistoryResponse` and documented `PUBLIC_FIELDS` allowlists here.
 
 export interface HistoryResponse {
   items: Array<{
@@ -157,7 +147,19 @@ export const PUBLIC_FIELDS = {
   discovery: ["items"],
   discoveryUser: ["userId", "username", "displayName", "avatar"],
   conversationList: ["items", "nextCursor", "hasMore"],
-  conversationSummary: ["id", "participantIds", "lastSeq"],
+  conversationSummary: [
+    "id",
+    "schemaVersion",
+    "participantIds",
+    "peer",
+    "lastSeq",
+    "createdAt",
+    "lastActivityAt",
+    "blockedByViewer",
+  ],
+  conversationCreate: ["conversation", "created"],
+  conversationDetail: ["conversation"],
+  conversationPeer: ["userId", "username", "displayName", "avatar"],
   history: ["items", "nextCursor", "hasMore"],
   historyItem: ["id", "seq", "senderUserId", "committedAt"],
   callList: ["items"],

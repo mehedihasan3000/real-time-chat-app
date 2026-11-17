@@ -211,15 +211,34 @@ describe("P1-08 — conversations/history are member-only and bounded", () => {
     expect(badCursor.status).toBe(400);
   });
 
-  it("POST /conversations placeholder does not mutate (503)", async () => {
-    const res = await req("/api/v1/conversations", tokenA, {
+  it("POST /conversations enforces schema allowlist and peer availability (upgraded in P2-03)", async () => {
+    const missingPeer = await req("/api/v1/conversations", tokenA, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({ schemaVersion: 1 }),
     });
-    expect(res.status).toBe(503);
-    const body = (await res.json()) as EnvelopeBody;
-    expect(body.error?.code).toBe("TEMPORARILY_UNAVAILABLE");
+    expect(missingPeer.status).toBe(400);
+    expect(((await missingPeer.json()) as EnvelopeBody).error?.code).toBe("INVALID_REQUEST");
+
+    const extraMember = await req("/api/v1/conversations", tokenA, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        schemaVersion: 1,
+        peerUserId: "user-b",
+        participantIds: ["user-a", "user-b", "user-c"],
+      }),
+    });
+    expect(extraMember.status).toBe(400);
+    expect(((await extraMember.json()) as EnvelopeBody).error?.code).toBe("INVALID_REQUEST");
+
+    const unavailable = await req("/api/v1/conversations", tokenA, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ schemaVersion: 1, peerUserId: "user-unseeded" }),
+    });
+    expect(unavailable.status).toBe(404);
+    expect(((await unavailable.json()) as EnvelopeBody).error?.code).toBe("USER_UNAVAILABLE");
   });
 });
 

@@ -13,6 +13,7 @@ export interface BlockStore {
   remove(blockerUserId: string, blockedUserId: string): Promise<void>;
   list(blockerUserId: string, limit: number): Promise<BlockRecord[]>;
   isBlocked(a: string, b: string): Promise<boolean>;
+  hasBlocked(blockerUserId: string, blockedUserId: string): Promise<boolean>;
   count(blockerUserId: string): Promise<number>;
 }
 
@@ -55,6 +56,11 @@ export class MemoryBlockStore implements BlockStore {
   /** Bilateral: either direction blocks discovery/presence for the pair. */
   async isBlocked(a: string, b: string): Promise<boolean> {
     return this.blocks.has(this.key(a, b)) || this.blocks.has(this.key(b, a));
+  }
+
+  /** Unidirectional check: true only when `blockerUserId` actively blocks `blockedUserId`. */
+  async hasBlocked(blockerUserId: string, blockedUserId: string): Promise<boolean> {
+    return this.blocks.has(this.key(blockerUserId, blockedUserId));
   }
 
   async count(blockerUserId: string): Promise<number> {

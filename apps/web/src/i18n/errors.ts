@@ -29,6 +29,10 @@ const errorCopy: Record<ErrorCode, Omit<ErrorCopy, "code">> = {
     titleKey: "errors.FORBIDDEN.title",
     descriptionKey: "errors.FORBIDDEN.description",
   },
+  BLOCKED: {
+    titleKey: "errors.BLOCKED.title",
+    descriptionKey: "errors.BLOCKED.description",
+  },
   DEVICE_REVOKED: {
     titleKey: "errors.DEVICE_REVOKED.title",
     descriptionKey: "errors.DEVICE_REVOKED.description",
@@ -36,6 +40,10 @@ const errorCopy: Record<ErrorCode, Omit<ErrorCopy, "code">> = {
   NOT_FOUND: {
     titleKey: "errors.NOT_FOUND.title",
     descriptionKey: "errors.NOT_FOUND.description",
+  },
+  USER_UNAVAILABLE: {
+    titleKey: "errors.USER_UNAVAILABLE.title",
+    descriptionKey: "errors.USER_UNAVAILABLE.description",
   },
   IDEMPOTENCY_CONFLICT: {
     titleKey: "errors.IDEMPOTENCY_CONFLICT.title",
