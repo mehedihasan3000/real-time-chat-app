@@ -360,6 +360,20 @@ export function createSocketServer(
       respond(successEnvelope({ ok: true }));
     });
 
+    // Canonical write path is HTTP POST /api/v1/conversations/:id/messages (DEC-021 §3.1).
+    // message:send is explicitly rejected and never persists or broadcasts.
+    socket.on("message:send", (_payload: unknown, callback?: (body: unknown) => void) => {
+      if (typeof callback === "function") {
+        callback(
+          failureEnvelope(
+            "FORBIDDEN",
+            "message:send is not supported; use HTTP POST /api/v1/conversations/:id/messages.",
+            false,
+          ),
+        );
+      }
+    });
+
     // Guard: any other protected event name is denied without broadcast.
     // Server→client event names are never accepted inbound (fail-closed).
     for (const event of SOCKET_EVENTS) {

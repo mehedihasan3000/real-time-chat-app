@@ -826,6 +826,8 @@
   "errors.FORBIDDEN.description": "এই অ্যাকাউন্ট বা কথোপকথনের জন্য এই অ্যাকশন পাওয়া যাচ্ছে না।",
   "errors.BLOCKED.title": "ব্যবহারকারী ব্লক করা হয়েছে",
   "errors.BLOCKED.description": "আপনি এই ব্যবহারকারীকে ব্লক করেছেন। নতুন কথোপকথন শুরু করার আগে সেটিংস থেকে আনব্লক করুন।",
+  "errors.UNAVAILABLE.title": "বার্তা পাঠানো যায়নি",
+  "errors.UNAVAILABLE.description": "এই বার্তাটি এখন পাঠানো যাচ্ছে না।",
   "errors.DEVICE_REVOKED.title": "ডিভাইস বাতিল হয়েছে",
   "errors.DEVICE_REVOKED.description": "এই ডিভাইসটি আর এনক্রিপশন কী-এর জন্য অনুমোদিত নয়। নতুন ডিভাইসে সাইন ইন করে এনক্রিপশন পুনরুদ্ধার বা রিসেট করুন।",
   "errors.NOT_FOUND.title": "পাওয়া যায়নি",

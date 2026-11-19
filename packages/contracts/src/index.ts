@@ -35,6 +35,7 @@ export const errorCodes = [
   "SESSION_REVOKED",
   "FORBIDDEN",
   "BLOCKED",
+  "UNAVAILABLE",
   "DEVICE_REVOKED",
   "NOT_FOUND",
   "USER_UNAVAILABLE",
@@ -213,6 +214,30 @@ export {
   type ConversationSummary,
   type CreateConversationRequest,
 } from "./conversations-v0.js";
+
+export {
+  MESSAGE_ALLOWED_PROTOCOL_VERSION,
+  MESSAGE_ALLOWED_PROTOCOL_VERSIONS,
+  MESSAGE_CLIENT_FORBIDDEN_FIELDS,
+  MESSAGE_FORBIDDEN_FIELDS,
+  MESSAGE_MAX_BODY_BYTES,
+  MESSAGE_MAX_ENVELOPE_BYTES,
+  MESSAGE_MAX_PLAINTEXT_CODE_POINTS,
+  MESSAGE_MIN_CIPHERTEXT_BYTES,
+  MESSAGE_SCHEMA_VERSION,
+  MESSAGE_SEND_LIMIT_PER_DAY,
+  MESSAGE_SEND_LIMIT_PER_HOUR,
+  MESSAGE_SEND_LIMIT_PER_MINUTE,
+  validateMessageAckSummary,
+  validateMessageSendRequest,
+  validateMessageSendResponse,
+  type DecodedMessageEnvelopeMetadata,
+  type MessageAckSummary,
+  type MessageProtocolVersion,
+  type MessageSendInput,
+  type MessageSendResponse,
+  type ValidatedMessageSend,
+} from "./messages-v0.js";
 
 export {
   DEVICE_FORBIDDEN_FIELDS,

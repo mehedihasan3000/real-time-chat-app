@@ -34,6 +34,12 @@ export interface CreateAppOptions {
   conversationLookup?: ResourceLookup<ConversationResource>;
   conversationStore?: import("./conversations/store.js").ConversationStore;
   conversationRateLimiter?: import("./conversations/rate-limit.js").ConversationRateLimiter;
+  messageStore?: import("./messages/store.js").MessageStore;
+  messageRateLimiter?: import("./messages/rate-limit.js").MessageRateLimiter;
+  onMessageCommitted?: (
+    record: import("./messages/store.js").MessageRecord,
+    conversation: import("./conversations/store.js").ConversationRecord,
+  ) => Promise<void> | void;
   userEligibilityLookup?: import("./conversations/view.js").UserEligibilityLookup;
   callLookup?: ResourceLookup<CallResource>;
   keyBackupLookup?: ResourceLookup<KeyBackupResource>;
@@ -91,6 +97,9 @@ export function createApp(options: CreateAppOptions = {}): Express {
     conversationLookup: options.conversationLookup,
     conversationStore: options.conversationStore,
     conversationRateLimiter: options.conversationRateLimiter,
+    messageStore: options.messageStore,
+    messageRateLimiter: options.messageRateLimiter,
+    onMessageCommitted: options.onMessageCommitted,
     userEligibilityLookup: options.userEligibilityLookup,
     callLookup: options.callLookup,
     keyBackupLookup: options.keyBackupLookup,

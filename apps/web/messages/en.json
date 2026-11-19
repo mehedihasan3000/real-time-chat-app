@@ -826,6 +826,8 @@
   "errors.FORBIDDEN.description": "This action is not available for this account or conversation.",
   "errors.BLOCKED.title": "User blocked",
   "errors.BLOCKED.description": "You blocked this user. Unblock them in settings before starting a conversation.",
+  "errors.UNAVAILABLE.title": "Message unavailable",
+  "errors.UNAVAILABLE.description": "This message cannot be delivered right now.",
   "errors.DEVICE_REVOKED.title": "Device revoked",
   "errors.DEVICE_REVOKED.description": "This device is no longer authorized for encryption keys. Sign in on a new device and restore or reset encryption.",
   "errors.NOT_FOUND.title": "Not found",

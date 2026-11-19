@@ -33,6 +33,10 @@ const errorCopy: Record<ErrorCode, Omit<ErrorCopy, "code">> = {
     titleKey: "errors.BLOCKED.title",
     descriptionKey: "errors.BLOCKED.description",
   },
+  UNAVAILABLE: {
+    titleKey: "errors.UNAVAILABLE.title",
+    descriptionKey: "errors.UNAVAILABLE.description",
+  },
   DEVICE_REVOKED: {
     titleKey: "errors.DEVICE_REVOKED.title",
     descriptionKey: "errors.DEVICE_REVOKED.description",

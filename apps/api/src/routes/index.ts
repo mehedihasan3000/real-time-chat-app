@@ -13,6 +13,7 @@ import {
   validateDisposition,
   validateHistoryQuery,
   validateKeyBackupLinkRequest,
+  validateMessageSendRequest,
   validatePageLimit,
   validateReportCreate,
   validateUsername,
@@ -25,6 +26,7 @@ import {
   type DevicePublicKeysResponse,
   type DeviceRevocationResponse,
   type KeyBackupLinkResponse,
+  type MessageSendResponse,
 } from "@chat/contracts";
 
 import { requireAuth } from "../auth/middleware.js";
@@ -75,9 +77,18 @@ import {
   MemoryConversationStore,
   checkConversationPairEligibility,
   toConversationSummary,
+  type ConversationRecord,
   type ConversationStore,
   type UserEligibilityLookup,
 } from "../conversations/index.js";
+import {
+  MemoryMessageStore,
+  MessageRateLimiter,
+  checkMessageSendEligibility,
+  toMessageAckSummary,
+  type MessageRecord,
+  type MessageStore,
+} from "../messages/index.js";
 import { findOperatorKey } from "../security/input.js";
 
 /**
@@ -97,6 +108,12 @@ export interface ApiRouterOptions {
   conversationLookup?: ResourceLookup<ConversationResource>;
   conversationStore?: ConversationStore;
   conversationRateLimiter?: ConversationRateLimiter;
+  messageStore?: MessageStore;
+  messageRateLimiter?: MessageRateLimiter;
+  onMessageCommitted?: (
+    record: MessageRecord,
+    conversation: ConversationRecord,
+  ) => Promise<void> | void;
   userEligibilityLookup?: UserEligibilityLookup;
   callLookup?: ResourceLookup<CallResource>;
   keyBackupLookup?: ResourceLookup<KeyBackupResource>;
@@ -144,6 +161,9 @@ export function createApiRouter(options: ApiRouterOptions): Router {
     conversationLookup = denyNullConversation,
     conversationStore = new MemoryConversationStore(),
     conversationRateLimiter = new ConversationRateLimiter(),
+    messageStore = new MemoryMessageStore(),
+    messageRateLimiter = new MessageRateLimiter(),
+    onMessageCommitted,
     userEligibilityLookup,
     callLookup = denyNullCall,
     keyBackupLookup = denyNullBackup,
@@ -417,6 +437,111 @@ export function createApiRouter(options: ApiRouterOptions): Router {
         return;
       }
       sendEmptyList(response, { items: [], nextCursor: null, hasMore: false });
+    },
+  );
+  router.post(
+    "/conversations/:id/messages",
+    auth,
+    sensitive,
+    member,
+    async (request: PrincipalRequest, response: Response) => {
+      if (principalOrDenial(request, response)) return;
+      if (findOperatorKey(request.body)) {
+        sendSafeError(response, 400, "INVALID_REQUEST", "Invalid request body.");
+        return;
+      }
+      const validated = validateMessageSendRequest(request.body ?? {});
+      if (!validated.ok) {
+        sendValidationFailure(response, validated);
+        return;
+      }
+
+      const requesterUserId = request.principal?.userId ?? "";
+      const conversationId = request.params.id as string | undefined;
+      const storedConversation = conversationId
+        ? await conversationStore.getById(conversationId)
+        : null;
+      if (!storedConversation || !storedConversation.participantIds.includes(requesterUserId)) {
+        sendSafeError(response, 404, "NOT_FOUND", "Resource not found.");
+        return;
+      }
+
+      const currentTime = now();
+      const limitCheck = messageRateLimiter.consume(requesterUserId, currentTime);
+      if (!limitCheck.allowed) {
+        response.setHeader("Retry-After", String(limitCheck.retryAfterSeconds));
+        response
+          .status(429)
+          .json(failureEnvelope("RATE_LIMITED", "Message send rate limit reached.", true));
+        return;
+      }
+
+      const eligibility = await checkMessageSendEligibility(
+        storedConversation,
+        requesterUserId,
+        validated.value.request.senderDeviceId,
+        {
+          deviceKeyStore,
+          blockStore,
+          isBlocked,
+          userEligibilityLookup,
+        },
+      );
+      if (!eligibility.ok) {
+        sendSafeError(response, eligibility.status, eligibility.code, eligibility.message);
+        return;
+      }
+
+      const commitResult = await messageStore.submitDurable({
+        conversationId: storedConversation.id,
+        senderUserId: requesterUserId,
+        senderDeviceId: validated.value.request.senderDeviceId,
+        clientMessageId: validated.value.request.clientMessageId,
+        protocolVersion: validated.value.request.protocolVersion,
+        encryptedEnvelope: validated.value.request.encryptedEnvelope,
+        conversationStore,
+        now: currentTime,
+      });
+
+      if (!commitResult.ok) {
+        if (commitResult.code === "IDEMPOTENCY_CONFLICT") {
+          sendSafeError(
+            response,
+            409,
+            "IDEMPOTENCY_CONFLICT",
+            "Message send identity was reused with different content.",
+          );
+          return;
+        }
+        if (commitResult.code === "NOT_FOUND") {
+          sendSafeError(response, 404, "NOT_FOUND", "Resource not found.");
+          return;
+        }
+        response
+          .status(503)
+          .json(
+            failureEnvelope(
+              "TEMPORARILY_UNAVAILABLE",
+              "Message persistence is temporarily unavailable.",
+              true,
+            ),
+          );
+        return;
+      }
+
+      if (!commitResult.idempotent && onMessageCommitted) {
+        try {
+          await onMessageCommitted(commitResult.record, storedConversation);
+        } catch {
+          // Live post-commit publish must never turn a durable commit into a false failure.
+        }
+      }
+
+      const data: MessageSendResponse = {
+        message: toMessageAckSummary(commitResult.record),
+        idempotent: commitResult.idempotent,
+      };
+      response.status(commitResult.idempotent ? 200 : 201).json(successEnvelope(data));
     },
   );
 
