@@ -242,6 +242,24 @@ export {
 } from "./messages-v0.js";
 
 export {
+  HISTORY_CURSOR_VERSION,
+  HISTORY_PAGE_DEFAULT,
+  HISTORY_PAGE_MAX,
+  HISTORY_SCHEMA_VERSION,
+  decodeHistoryAfterReference,
+  decodeHistoryCursor,
+  encodeHistoryCursor,
+  validateConversationHistoryQuery,
+  validateHistoryMessageItem,
+  validateHistoryPageResponse,
+  type ConversationHistoryQuery,
+  type HistoryCursor,
+  type HistoryMessageItem,
+  type HistoryPageResponse,
+  type HistoryPaginationMode,
+} from "./history-v0.js";
+
+export {
   DEVICE_FORBIDDEN_FIELDS,
   DEVICE_KEY_ALGORITHMS,
   DEVICE_KEY_SCHEMA_VERSION,

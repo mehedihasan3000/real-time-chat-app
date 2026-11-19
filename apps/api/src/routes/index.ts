@@ -4,6 +4,7 @@ import {
   failureEnvelope,
   successEnvelope,
   validateBlockCreate,
+  validateConversationHistoryQuery,
   validateConversationListQuery,
   validateCreateConversationRequest,
   validateDeviceEnrollmentRequest,
@@ -11,7 +12,6 @@ import {
   validateDiscoveryUsername,
   validateDisplayName,
   validateDisposition,
-  validateHistoryQuery,
   validateKeyBackupLinkRequest,
   validateMessageSendRequest,
   validatePageLimit,
@@ -89,6 +89,7 @@ import {
   type MessageRecord,
   type MessageStore,
 } from "../messages/index.js";
+import { fetchConversationHistoryPage } from "../history/index.js";
 import { findOperatorKey } from "../security/input.js";
 
 /**
@@ -423,20 +424,48 @@ export function createApiRouter(options: ApiRouterOptions): Router {
     },
   );
 
-  // History (FR-HIST-002): bounded pagination + member-only.
+  // History (P2-07, FR-HIST-002, INT-006, DEC-021 §7, DEC-023 provisional):
+  // member-only, conversation-scoped opaque cursor, bounded 50/100, ciphertext-only.
   router.get(
     "/conversations/:id/messages",
     auth,
     read,
     member,
-    (request: PrincipalRequest, response: Response) => {
+    async (request: PrincipalRequest, response: Response) => {
       if (principalOrDenial(request, response)) return;
-      const query = validateHistoryQuery(request.query as unknown as Record<string, unknown>);
+      const conversationId = request.params.id as string;
+      if (findOperatorKey(request.query)) {
+        sendSafeError(response, 400, "INVALID_REQUEST", "Invalid history query parameters.");
+        return;
+      }
+      const query = validateConversationHistoryQuery(
+        request.query as unknown as Record<string, unknown>,
+        conversationId,
+      );
       if (!query.ok) {
         sendValidationFailure(response, query);
         return;
       }
-      sendEmptyList(response, { items: [], nextCursor: null, hasMore: false });
+      try {
+        const page = await fetchConversationHistoryPage({
+          conversationId,
+          query: query.value,
+          messageStore,
+          conversationStore,
+        });
+        response.setHeader("Cache-Control", "no-store");
+        response.status(200).json(successEnvelope(page));
+      } catch {
+        response
+          .status(503)
+          .json(
+            failureEnvelope(
+              "TEMPORARILY_UNAVAILABLE",
+              "Message history is temporarily unavailable.",
+              true,
+            ),
+          );
+      }
     },
   );
   router.post(

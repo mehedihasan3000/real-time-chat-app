@@ -82,7 +82,7 @@ export function ReceivedMessageFeed({ items, ariaLabel, emptyMessage }: Received
                 <p className={styles.placeholderTitle}>{vm.placeholderTitle}</p>
                 <p className={styles.placeholderDescription}>{vm.placeholderDescription}</p>
                 {vm.recoveryLabel && vm.recoveryHref ? (
-                  <Link href={vm.recoveryHref} className={styles.recoveryLink}>
+                  <Link href={vm.recoveryHref} prefetch={false} className={styles.recoveryLink}>
                     {vm.recoveryLabel}
                   </Link>
                 ) : null}

@@ -7,6 +7,7 @@
  * route leaks an undocumented field. Placeholders return documented
  * empty/503 shapes and never mutate private stores.
  */
+import type { HistoryPageResponse } from "./history-v0.js";
 import type { ValidationResult } from "./v0.js";
 
 /* ---------------------------------- Me ---------------------------------- */
@@ -49,18 +50,10 @@ export function validateDiscoveryUsername(value: unknown): ValidationResult<stri
 
 /* ------------------------------ Conversations ---------------------------- */
 // Conversation list/create/detail shapes live in `conversations-v0.ts` (P2-03);
-// keep `HistoryResponse` and documented `PUBLIC_FIELDS` allowlists here.
+// history pagination shapes live in `history-v0.ts` (P2-07). Keep `HistoryResponse`
+// alias and documented `PUBLIC_FIELDS` allowlists here.
 
-export interface HistoryResponse {
-  items: Array<{
-    id: string;
-    seq: number;
-    senderUserId: string;
-    committedAt: string;
-  }>;
-  nextCursor: string | null;
-  hasMore: boolean;
-}
+export type HistoryResponse = HistoryPageResponse;
 
 /* ---------------------------------- Calls -------------------------------- */
 
@@ -160,8 +153,19 @@ export const PUBLIC_FIELDS = {
   conversationCreate: ["conversation", "created"],
   conversationDetail: ["conversation"],
   conversationPeer: ["userId", "username", "displayName", "avatar"],
-  history: ["items", "nextCursor", "hasMore"],
-  historyItem: ["id", "seq", "senderUserId", "committedAt"],
+  history: ["items", "nextCursor", "hasMore", "latestSeq"],
+  historyItem: [
+    "schemaVersion",
+    "messageId",
+    "conversationId",
+    "seq",
+    "senderUserId",
+    "senderDeviceId",
+    "clientMessageId",
+    "protocolVersion",
+    "encryptedEnvelope",
+    "committedAt",
+  ],
   messageAck: [
     "messageId",
     "conversationId",
