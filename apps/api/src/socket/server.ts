@@ -5,6 +5,8 @@ import { Server as SocketServer, type Socket } from "socket.io";
 import {
   SOCKET_NAMESPACE,
   SOCKET_SESSION_EXPIRED,
+  SOCKET_SUBSCRIBE_EVENT,
+  SOCKET_UNSUBSCRIBE_EVENT,
   SOCKET_CLIENT_EVENTS,
   SOCKET_EVENTS,
   CONNECTION_LIMIT_PER_MINUTE,
@@ -15,6 +17,7 @@ import {
   userRoom,
   failureEnvelope,
   successEnvelope,
+  validateConversationSubscribePayload,
   validateSocketPayload,
 } from "@chat/contracts";
 
@@ -28,7 +31,8 @@ import {
 } from "../authz/index.js";
 
 /**
- * Socket.IO foundation v0 (P1-09, INT-003/INT-004, DEC-019).
+ * Socket.IO foundation v0 (P1-09, INT-003/INT-004, DEC-019; hardened P2-08
+ * for `FR-AUTH-007` and `FR-HIST-003` / `DEC-021` §7.4).
  *
  * - JWT/JWKS handshake: 5-min EdDSA token in `auth.token`, verified via
  *   the P1-06 verifier; `sid` session checked directly (no cache) on
@@ -39,8 +43,11 @@ import {
  *   `session:expired` and disconnects. Token expiry also emits
  *   `session:expired` and disconnects; the residual read window is bounded
  *   by the JWT lifetime and is not extended.
- * - Rooms: conversation rooms are joined only via `join` after CURRENT
- *   membership recheck (stale rooms cannot bypass later removal).
+ * - Rooms: conversation rooms are joined only via `conversation:subscribe`
+ *   (or legacy `join` alias) after active-session verification and CURRENT
+ *   membership recheck (`conversationLookup`); denied resubscribes explicitly
+ *   evict any stale room. Socket.IO recovery is disabled so persisted HTTP
+ *   history remains the sole source of truth (`DEC-021` §7.4).
  * - Every protected inbound event rechecks authorization at event time via
  *   the P1-07 `authorizeSocketEvent` helpers; HTTP stays canonical for
  *   message sends (no second write path).
@@ -185,6 +192,36 @@ export function createSocketServer(
 
     const principal = (): Principal | null => (socket.data as SocketData).principal ?? null;
 
+    const expireAndDisconnect = (respond?: (body: unknown) => void) => {
+      const ack = errorAck("SESSION_REVOKED", "Session is no longer valid.");
+      respond?.(ack);
+      clearTimeout((socket.data as SocketData).expiryTimer);
+      socket.emit(
+        SOCKET_SESSION_EXPIRED,
+        errorAck("SESSION_REVOKED", "Session is no longer valid."),
+      );
+      socket.disconnect(true);
+    };
+
+    const ensureSocketSessionActive = async (): Promise<Principal | null> => {
+      const socketData = socket.data as SocketData;
+      const current = socketData.principal ?? null;
+      if (!current || current.userId !== userId || !current.emailVerified) {
+        return null;
+      }
+      if (
+        typeof socketData.tokenExpiresAt === "number" &&
+        socketData.tokenExpiresAt <= Date.now()
+      ) {
+        return null;
+      }
+      const session = await getSessionForSensitive(options.sessionLookup, current.sid);
+      if (!session || session.revoked || session.userId !== userId) {
+        return null;
+      }
+      return current;
+    };
+
     socket.on("auth:refresh", async (payload: unknown, callback?: (body: unknown) => void) => {
       const respond = (body: unknown) => {
         if (typeof callback === "function") callback(body);
@@ -202,6 +239,7 @@ export function createSocketServer(
             : null;
       if (!token) {
         respond(errorAck("UNAUTHENTICATED", "A fresh token is required."));
+        clearTimeout((socket.data as SocketData).expiryTimer);
         socket.emit(SOCKET_SESSION_EXPIRED, errorAck("SESSION_REVOKED", "Session expired."));
         socket.disconnect(true);
         return;
@@ -210,14 +248,9 @@ export function createSocketServer(
         const claims = await options.verifier(token);
         const session = await getSessionForSensitive(options.sessionLookup, claims.sid);
         const refreshed = await derivePrincipalWithRole(claims, session, options.roleLookup);
-        // Refresh must belong to the same user; a different user is a takeover.
-        if (!refreshed || refreshed.userId !== userId) {
-          respond(errorAck("SESSION_REVOKED", "Session is no longer valid."));
-          socket.emit(
-            SOCKET_SESSION_EXPIRED,
-            errorAck("SESSION_REVOKED", "Session is no longer valid."),
-          );
-          socket.disconnect(true);
+        // Refresh must belong to the same verified user; a different user is a takeover.
+        if (!refreshed || !refreshed.emailVerified || refreshed.userId !== userId) {
+          expireAndDisconnect(respond);
           return;
         }
         (socket.data as SocketData).principal = refreshed;
@@ -225,16 +258,14 @@ export function createSocketServer(
         scheduleExpiry(socket, claims.exp * 1000);
         respond(successEnvelope({ ok: true }));
       } catch {
-        respond(errorAck("SESSION_REVOKED", "Session is no longer valid."));
-        socket.emit(
-          SOCKET_SESSION_EXPIRED,
-          errorAck("SESSION_REVOKED", "Session is no longer valid."),
-        );
-        socket.disconnect(true);
+        expireAndDisconnect(respond);
       }
     });
 
-    socket.on("join", async (payload: unknown, callback?: (body: unknown) => void) => {
+    const handleConversationSubscribe = async (
+      payload: unknown,
+      callback?: (body: unknown) => void,
+    ) => {
       const respond = (body: unknown) => {
         if (typeof callback === "function") callback(body);
       };
@@ -242,44 +273,61 @@ export function createSocketServer(
         respond(errorAck("RATE_LIMITED", "Event rate limit exceeded."));
         return;
       }
-      const validated = validateSocketPayload(payload);
+      const validated = validateConversationSubscribePayload(payload);
       if (!validated.ok) {
-        respond(failureEnvelope(validated.code as never, validated.message, validated.retryable));
+        respond(failureEnvelope(validated.code, validated.message, validated.retryable));
         return;
       }
-      const conversationId = validated.value.conversationId ?? null;
-      if (!conversationId) {
-        respond(errorAck("INVALID_REQUEST", "conversationId is required."));
+      const activePrincipal = await ensureSocketSessionActive();
+      if (!activePrincipal) {
+        expireAndDisconnect(respond);
         return;
       }
+      const { conversationId } = validated.value;
       const result = await authorizeSocketConversationJoin(
-        principal(),
+        activePrincipal,
         conversationId,
         options.authorizer,
       );
       if (!result.ok) {
+        await socket.leave(conversationRoom(conversationId));
         respond(
           failureEnvelope(result.denial.code, result.denial.message, result.denial.retryable),
         );
         return;
       }
       await socket.join(conversationRoom(conversationId));
-      respond(successEnvelope({ conversationId }));
-    });
+      respond(successEnvelope({ conversationId, subscribed: true }));
+    };
 
-    socket.on("leave", async (payload: unknown, callback?: (body: unknown) => void) => {
+    const handleConversationUnsubscribe = async (
+      payload: unknown,
+      callback?: (body: unknown) => void,
+    ) => {
       const respond = (body: unknown) => {
         if (typeof callback === "function") callback(body);
       };
       const validated = validateSocketPayload(payload);
       if (!validated.ok) {
-        respond(failureEnvelope(validated.code as never, validated.message, validated.retryable));
+        respond(failureEnvelope(validated.code, validated.message, validated.retryable));
         return;
       }
       const conversationId = validated.value.conversationId ?? null;
-      if (conversationId) await socket.leave(conversationRoom(conversationId));
-      respond(successEnvelope({ ok: true }));
-    });
+      if (conversationId) {
+        await socket.leave(conversationRoom(conversationId));
+      }
+      respond(
+        successEnvelope({
+          ok: true,
+          ...(conversationId ? { conversationId, subscribed: false } : {}),
+        }),
+      );
+    };
+
+    socket.on(SOCKET_SUBSCRIBE_EVENT, handleConversationSubscribe);
+    socket.on("join", handleConversationSubscribe);
+    socket.on(SOCKET_UNSUBSCRIBE_EVENT, handleConversationUnsubscribe);
+    socket.on("leave", handleConversationUnsubscribe);
 
     socket.on("typing", async (payload: unknown, callback?: (body: unknown) => void) => {
       const respond = (body: unknown) => {
@@ -393,4 +441,45 @@ export function createSocketServer(
   });
 
   return io;
+}
+
+/**
+ * Best-effort immediate socket invalidation when a Better Auth session (`sid`)
+ * is revoked (`DEC-019` §3.2, `FR-AUTH-007`). Emits `session:expired` and closes
+ * matching connected `/v1` sockets without claiming instantaneous global JWT
+ * revocation across stateless HTTP reads.
+ */
+export function disconnectRevokedSessionSockets(io: SocketServer, sid: string): number {
+  const namespace = io.of(SOCKET_NAMESPACE);
+  let disconnected = 0;
+  for (const socket of namespace.sockets.values() as Iterable<Socket>) {
+    const data = socket.data as SocketData;
+    if (data.principal?.sid === sid) {
+      clearTimeout(data.expiryTimer);
+      socket.emit(SOCKET_SESSION_EXPIRED, errorAck("SESSION_REVOKED", "Session revoked."));
+      socket.disconnect(true);
+      disconnected += 1;
+    }
+  }
+  return disconnected;
+}
+
+/**
+ * Best-effort immediate socket invalidation for all sockets belonging to a user
+ * after password reset, password change, email change, or account suspension
+ * (`FR-AUTH-006`–`FR-AUTH-007`, `DEC-019` §3.2).
+ */
+export function disconnectRevokedUserSockets(io: SocketServer, userId: string): number {
+  const namespace = io.of(SOCKET_NAMESPACE);
+  let disconnected = 0;
+  for (const socket of namespace.sockets.values() as Iterable<Socket>) {
+    const data = socket.data as SocketData;
+    if (data.principal?.userId === userId) {
+      clearTimeout(data.expiryTimer);
+      socket.emit(SOCKET_SESSION_EXPIRED, errorAck("SESSION_REVOKED", "Session revoked."));
+      socket.disconnect(true);
+      disconnected += 1;
+    }
+  }
+  return disconnected;
 }
