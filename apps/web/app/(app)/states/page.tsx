@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ActionLink } from "@/components/ui/action-link";
 import { HistoryFixtureShowcase } from "@/components/chat/history-fixture";
 import { ReceiveDecryptFixtureShowcase } from "@/components/chat/receive-decrypt-fixture";
+import { ReconnectCatchUpFixtureShowcase } from "@/components/chat/reconnect-catchup-fixture";
 import { SendStateFixtureShowcase } from "@/components/chat/send-state-fixture";
 import { PageHeader } from "@/components/ui/page-header";
 import { PlaceholderNotice } from "@/components/ui/placeholder-notice";
@@ -154,6 +155,7 @@ export default function StatesPage() {
       <SendStateFixtureShowcase />
       <ReceiveDecryptFixtureShowcase />
       <HistoryFixtureShowcase />
+      <ReconnectCatchUpFixtureShowcase />
     </div>
   );
 }

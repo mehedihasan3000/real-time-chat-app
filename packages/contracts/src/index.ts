@@ -112,15 +112,23 @@ export {
 
 export {
   CONNECTION_LIMIT_PER_MINUTE,
+  RECONNECT_BACKOFF_SCHEDULE_MS,
+  RECONNECT_JITTER_RATIO,
   REFRESH_MAX_INTERVAL_MS,
   SOCKET_CLIENT_EVENTS,
   SOCKET_ERROR,
   SOCKET_EVENT_LIMIT_PER_MINUTE,
   SOCKET_NAMESPACE,
   SOCKET_SESSION_EXPIRED,
+  SOCKET_SUBSCRIBE_EVENT,
+  SOCKET_SYNC_REQUEST_EVENT,
+  SOCKET_UNSUBSCRIBE_EVENT,
   TYPING_COALESCE_MS,
   conversationRoom,
   userRoom,
+  validateConversationSubscribePayload,
+  type ConversationSubscribeAck,
+  type ConversationSubscribePayload,
   type SocketClientEvent,
 } from "./socket-v0.js";
 
