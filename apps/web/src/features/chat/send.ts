@@ -21,7 +21,7 @@ import {
   type OlmPeerTarget,
 } from "@chat/crypto";
 
-import { errorCopyFor, type ErrorCopy } from "../../i18n/errors.js";
+import { errorCopyFor, type ErrorCopy } from "../../i18n/errors";
 
 /**
  * Encrypted outbound send pipeline v0 (P2-04, FR-CHAT-002..004, FR-SEC-001,
