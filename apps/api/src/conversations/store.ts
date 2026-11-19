@@ -45,6 +45,11 @@ export interface ConversationStore {
   getById(conversationId: string): Promise<ConversationRecord | null>;
   getByPair(userA: string, userB: string): Promise<ConversationRecord | null>;
   listForUser(userId: string, query: ConversationListQuery): Promise<ConversationListResult>;
+  reserveNextSeq(
+    conversationId: string,
+    participantUserId: string,
+    now?: Date,
+  ): Promise<number | null>;
 }
 
 export interface MemoryConversationStoreOptions {
@@ -180,6 +185,23 @@ export class MemoryConversationStore implements ConversationStore {
       hasMore && last ? encodeConversationCursor(last.lastActivityAt, last.id) : null;
 
     return { items: page, nextCursor, hasMore };
+  }
+
+  async reserveNextSeq(
+    conversationId: string,
+    participantUserId: string,
+    now = new Date(),
+  ): Promise<number | null> {
+    const record = this.byId.get(conversationId);
+    if (!record || !record.participantIds.includes(participantUserId)) {
+      return null;
+    }
+    record.lastSeq += 1;
+    const timestamp = now.toISOString();
+    if (timestamp > record.lastActivityAt) {
+      record.lastActivityAt = timestamp;
+    }
+    return record.lastSeq;
   }
 }
 
@@ -332,5 +354,27 @@ export class MongoConversationStore implements ConversationStore {
     const nextCursor =
       hasMore && last ? encodeConversationCursor(last.lastActivityAt, last.id) : null;
     return { items, nextCursor, hasMore };
+  }
+
+  async reserveNextSeq(
+    conversationId: string,
+    participantUserId: string,
+    now = new Date(),
+  ): Promise<number | null> {
+    const updated = await this.collection.findOneAndUpdate(
+      { _id: conversationId, participantIds: participantUserId },
+      {
+        $inc: { lastSeq: 1 },
+        $max: { lastActivityAt: now },
+      },
+      {
+        returnDocument: "after",
+        writeConcern: { w: "majority", j: true, wtimeout: 5000 },
+      },
+    );
+    if (!updated) return null;
+    const record = fromMongoDoc(updated);
+    if (!record.participantIds.includes(participantUserId)) return null;
+    return record.lastSeq;
   }
 }
