@@ -37,7 +37,8 @@ export interface OutboxSnapshot {
   activeConversationId: string | null;
   online: boolean;
   storageAvailable: boolean;
-  storageNoticeCode: "STORAGE_UNAVAILABLE" | "STORAGE_CLEARED" | null;
+  storageNoticeCode: "STORAGE_UNAVAILABLE" | "STORAGE_CLEARED" | "CORRUPT_OUTBOX" | null;
+  logoutWarningPendingCount?: number | null;
   entriesForActiveConversation: OutboxRecord[];
   allEntries: OutboxRecord[];
 }
@@ -109,7 +110,9 @@ export class SendOutboxCoordinator {
 
   private online: boolean;
   private storageAvailable = true;
-  private storageNoticeCode: "STORAGE_UNAVAILABLE" | "STORAGE_CLEARED" | null = null;
+  private storageNoticeCode: "STORAGE_UNAVAILABLE" | "STORAGE_CLEARED" | "CORRUPT_OUTBOX" | null =
+    null;
+  private logoutWarningPendingCount: number | null = null;
   private epoch = 0;
   private entries = new Map<string, OutboxRecord>();
   private canceledIds = new Set<string>();
@@ -155,6 +158,7 @@ export class SendOutboxCoordinator {
       online: this.online,
       storageAvailable: this.storageAvailable,
       storageNoticeCode: this.storageNoticeCode,
+      logoutWarningPendingCount: this.logoutWarningPendingCount,
       entriesForActiveConversation: filtered,
       allEntries: all,
     };
@@ -187,14 +191,16 @@ export class SendOutboxCoordinator {
     try {
       await this.storage.saveAll(this.accountId, snapshotList);
       this.storageAvailable = true;
-      if (this.storageNoticeCode === "STORAGE_UNAVAILABLE") {
+      if (
+        this.storageNoticeCode === "STORAGE_UNAVAILABLE" ||
+        this.storageNoticeCode === "CORRUPT_OUTBOX"
+      ) {
         this.storageNoticeCode = null;
       }
     } catch (error) {
       if (error instanceof OutboxStorageError) {
-        this.storageAvailable = false;
-        this.storageNoticeCode =
-          error.code === "STORAGE_CLEARED" ? "STORAGE_CLEARED" : "STORAGE_UNAVAILABLE";
+        this.storageAvailable = error.code === "STORAGE_CLEARED";
+        this.storageNoticeCode = error.code;
         return;
       }
       this.storageAvailable = false;
@@ -233,8 +239,10 @@ export class SendOutboxCoordinator {
       if (capturedEpoch !== this.epoch || capturedAccount !== this.accountId) return;
       if (error instanceof OutboxStorageError) {
         this.storageAvailable = error.code === "STORAGE_CLEARED";
-        this.storageNoticeCode =
-          error.code === "STORAGE_CLEARED" ? "STORAGE_CLEARED" : "STORAGE_UNAVAILABLE";
+        this.storageNoticeCode = error.code;
+        if (error.code === "STORAGE_CLEARED" || error.code === "CORRUPT_OUTBOX") {
+          this.entries.clear();
+        }
       } else {
         this.storageAvailable = false;
         this.storageNoticeCode = "STORAGE_UNAVAILABLE";
@@ -258,6 +266,8 @@ export class SendOutboxCoordinator {
     this.clearAllTimers();
     this.inFlightPromises.clear();
     this.entries.clear();
+    this.logoutWarningPendingCount = null;
+    this.storageNoticeCode = null;
 
     await this.hydrate();
     if (previouslyPendingCount > 0 && this.entries.size === 0 && this.storageAvailable) {
@@ -288,6 +298,13 @@ export class SendOutboxCoordinator {
       nowMs: this.nowMs(),
     });
 
+    this.logoutWarningPendingCount = null;
+    if (
+      this.storageNoticeCode === "STORAGE_CLEARED" ||
+      this.storageNoticeCode === "CORRUPT_OUTBOX"
+    ) {
+      this.storageNoticeCode = null;
+    }
     this.canceledIds.delete(entry.clientMessageId);
     this.entries.set(entry.clientMessageId, entry);
     await this.persist();
@@ -400,13 +417,93 @@ export class SendOutboxCoordinator {
     const capturedEpoch = this.epoch;
     const capturedAccount = this.accountId;
 
-    const sendingRecord = markAttemptStarted(current, this.nowMs(), opts.countTowardAutoCap);
-    this.clearEntryTimer(clientMessageId);
-    this.entries.set(clientMessageId, sendingRecord);
-    await this.persist();
-    this.emit();
+    const runAttempt = async (): Promise<OutboxRecord> => {
+      if (
+        capturedEpoch !== this.epoch ||
+        capturedAccount !== this.accountId ||
+        this.canceledIds.has(clientMessageId) ||
+        !this.entries.has(clientMessageId)
+      ) {
+        return cloneOutboxRecord(current);
+      }
 
-    const promise = (async (): Promise<OutboxRecord> => {
+      let activeRecord = this.entries.get(clientMessageId)!;
+
+      // Cross-tab Web Locks coordination (DEC-021 §6.1): avoid duplicating an
+      // HTTP send that a sibling tab completed or updated while we waited for the lock.
+      if (this.storage.persistent) {
+        try {
+          const accepted = await this.storage.getAcceptedReceipt?.(
+            capturedAccount,
+            clientMessageId,
+          );
+          if (
+            capturedEpoch !== this.epoch ||
+            capturedAccount !== this.accountId ||
+            this.canceledIds.has(clientMessageId) ||
+            !this.entries.has(clientMessageId)
+          ) {
+            return cloneOutboxRecord(activeRecord);
+          }
+          if (accepted) {
+            const syntheticResponse: MessageSendResponse = {
+              idempotent: true,
+              message: {
+                messageId: accepted.messageId,
+                conversationId: activeRecord.conversationId,
+                seq: accepted.seq,
+                senderUserId: capturedAccount,
+                senderDeviceId: activeRecord.senderDeviceId,
+                clientMessageId: activeRecord.clientMessageId,
+                protocolVersion: activeRecord.payload.protocolVersion,
+                committedAt: accepted.committedAt,
+                schemaVersion: 1,
+              },
+            };
+            const syncedSent = markAttemptSucceeded(activeRecord, syntheticResponse, this.nowMs());
+            this.entries.set(clientMessageId, syncedSent);
+            await this.persist();
+            this.emit();
+            return cloneOutboxRecord(syncedSent);
+          }
+
+          const persisted = await this.storage.loadAll(capturedAccount);
+          if (
+            capturedEpoch !== this.epoch ||
+            capturedAccount !== this.accountId ||
+            this.canceledIds.has(clientMessageId) ||
+            !this.entries.has(clientMessageId)
+          ) {
+            return cloneOutboxRecord(activeRecord);
+          }
+          const fresher = persisted.find((item) => item.clientMessageId === clientMessageId);
+          if (fresher) {
+            activeRecord = fresher;
+            this.entries.set(clientMessageId, fresher);
+            if (fresher.status === "sent" || fresher.status === "failed") {
+              this.emit();
+              return cloneOutboxRecord(fresher);
+            }
+            if (fresher.nextAttemptAtMs !== null && fresher.nextAttemptAtMs > this.nowMs()) {
+              this.emit();
+              this.scheduleRetryIfNeeded(fresher, capturedEpoch, capturedAccount);
+              return cloneOutboxRecord(fresher);
+            }
+          }
+        } catch (storageErr) {
+          if (storageErr instanceof OutboxStorageError) {
+            this.storageAvailable = storageErr.code === "STORAGE_CLEARED";
+            this.storageNoticeCode = storageErr.code;
+          }
+        }
+      }
+
+      const sendingRecord = markAttemptStarted(activeRecord, this.nowMs(), opts.countTowardAutoCap);
+      this.clearEntryTimer(clientMessageId);
+      this.entries.set(clientMessageId, sendingRecord);
+      await this.persist();
+      this.emit();
+
       try {
         const prepared: PreparedEncryptedSend = {
           conversationId: sendingRecord.conversationId,
@@ -457,10 +554,16 @@ export class SendOutboxCoordinator {
         this.emit();
         this.scheduleRetryIfNeeded(nextRecord, capturedEpoch, capturedAccount);
         return cloneOutboxRecord(nextRecord);
-      } finally {
-        this.inFlightPromises.delete(clientMessageId);
       }
-    })();
+    };
+
+    const executeAttempt = this.storage.withSendLock
+      ? () => this.storage.withSendLock!(capturedAccount, clientMessageId, runAttempt)
+      : runAttempt;
+
+    const promise = executeAttempt().finally(() => {
+      this.inFlightPromises.delete(clientMessageId);
+    });
 
     this.inFlightPromises.set(clientMessageId, promise);
     return promise;
@@ -470,6 +573,7 @@ export class SendOutboxCoordinator {
     this.epoch += 1;
     this.clearAllTimers();
     this.inFlightPromises.clear();
+    this.logoutWarningPendingCount = null;
     const now = this.nowMs();
     for (const [id, entry] of this.entries.entries()) {
       if (entry.status !== "sent") {
@@ -489,6 +593,44 @@ export class SendOutboxCoordinator {
     return false;
   }
 
+  /**
+   * DEC-021 §6.1: Warn before sign-out if pending outbox entries exist; once
+   * confirmed (or when none are pending), delete outbox entries and local key.
+   */
+  async requestLogout(options?: {
+    confirmDiscardPending?: boolean;
+  }): Promise<{ completed: boolean; requiresConfirmation: boolean; pendingCount: number }> {
+    const pendingCount = Array.from(this.entries.values()).filter(
+      (entry) =>
+        entry.status === "queued" || entry.status === "sending" || entry.status === "unknown",
+    ).length;
+
+    if (pendingCount > 0 && !options?.confirmDiscardPending) {
+      this.logoutWarningPendingCount = pendingCount;
+      this.emit();
+      return {
+        completed: false,
+        requiresConfirmation: true,
+        pendingCount,
+      };
+    }
+
+    this.logoutWarningPendingCount = null;
+    await this.logoutAndClear();
+    return {
+      completed: true,
+      requiresConfirmation: false,
+      pendingCount,
+    };
+  }
+
+  cancelLogoutRequest(): void {
+    if (this.logoutWarningPendingCount !== null) {
+      this.logoutWarningPendingCount = null;
+      this.emit();
+    }
+  }
+
   async switchAccount(
     nextAccountId: string,
     nextConversationId: string | null = null,
@@ -501,6 +643,7 @@ export class SendOutboxCoordinator {
     this.accountId = nextAccountId;
     this.activeConversationId = nextConversationId;
     this.storageNoticeCode = null;
+    this.logoutWarningPendingCount = null;
     await this.hydrate();
   }
 
@@ -512,6 +655,7 @@ export class SendOutboxCoordinator {
     this.canceledIds.clear();
     this.entries.clear();
     this.storageNoticeCode = null;
+    this.logoutWarningPendingCount = null;
     await this.storage.clear(prevAccount);
     this.emit();
   }
