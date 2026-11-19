@@ -70,17 +70,30 @@ export function buildSendStateBanners(snapshot: OutboxSnapshot): SendStateBanner
       descriptionKey: "sendState.banner.offlineDescription",
     });
   }
-  if (!snapshot.storageAvailable || snapshot.storageNoticeCode === "STORAGE_UNAVAILABLE") {
+  if (snapshot.storageNoticeCode === "CORRUPT_OUTBOX") {
     banners.push({
       kind: "error",
       titleKey: "states.errorTitle",
-      descriptionKey: "sendState.detail.storageUnavailable",
+      descriptionKey: "sendState.detail.corruptOutbox",
     });
   } else if (snapshot.storageNoticeCode === "STORAGE_CLEARED") {
     banners.push({
       kind: "error",
       titleKey: "states.keyRecoveryTitle",
       descriptionKey: "sendState.detail.storageCleared",
+    });
+  } else if (!snapshot.storageAvailable || snapshot.storageNoticeCode === "STORAGE_UNAVAILABLE") {
+    banners.push({
+      kind: "error",
+      titleKey: "states.errorTitle",
+      descriptionKey: "sendState.detail.storageUnavailable",
+    });
+  }
+  if ((snapshot.logoutWarningPendingCount ?? 0) > 0) {
+    banners.push({
+      kind: "error",
+      titleKey: "sendState.banner.logoutWarningTitle",
+      descriptionKey: "sendState.banner.logoutWarningDescription",
     });
   }
   return banners;

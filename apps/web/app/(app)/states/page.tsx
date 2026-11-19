@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import { ActionLink } from "@/components/ui/action-link";
+import { EncryptedOutboxFixtureShowcase } from "@/components/chat/encrypted-outbox-fixture";
 import { HistoryFixtureShowcase } from "@/components/chat/history-fixture";
 import { ReceiveDecryptFixtureShowcase } from "@/components/chat/receive-decrypt-fixture";
 import { ReconnectCatchUpFixtureShowcase } from "@/components/chat/reconnect-catchup-fixture";
@@ -156,6 +157,7 @@ export default function StatesPage() {
       <ReceiveDecryptFixtureShowcase />
       <HistoryFixtureShowcase />
       <ReconnectCatchUpFixtureShowcase />
+      <EncryptedOutboxFixtureShowcase />
     </div>
   );
 }
