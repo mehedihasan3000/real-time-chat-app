@@ -16,9 +16,9 @@ import {
   type ErrorCode,
 } from "@chat/contracts";
 
-import type { MessageKey } from "../../i18n/catalog.js";
-import { errorCopyFor, type ErrorCopy } from "../../i18n/errors.js";
-import { avatarFor } from "../profile/avatar.js";
+import type { MessageKey } from "../../i18n/catalog";
+import { errorCopyFor, type ErrorCopy } from "../../i18n/errors";
+import { avatarFor } from "../profile/avatar";
 
 /**
  * Web chat conversation create/list client and state helpers (P2-03).

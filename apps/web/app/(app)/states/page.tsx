@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import { ActionLink } from "@/components/ui/action-link";
+import { SendStateFixtureShowcase } from "@/components/chat/send-state-fixture";
 import { PageHeader } from "@/components/ui/page-header";
 import { PlaceholderNotice } from "@/components/ui/placeholder-notice";
 import { StatePanel } from "@/components/ui/state-panel";
@@ -147,6 +148,8 @@ export default function StatesPage() {
           </li>
         </ul>
       </section>
+
+      <SendStateFixtureShowcase />
     </div>
   );
 }
