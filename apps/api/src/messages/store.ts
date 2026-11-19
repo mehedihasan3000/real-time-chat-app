@@ -57,6 +57,19 @@ export type MessageCommitResult =
       code: "NOT_FOUND" | "IDEMPOTENCY_CONFLICT" | "TEMPORARILY_UNAVAILABLE";
     };
 
+export interface HistoryPageQueryInput {
+  conversationId: string;
+  limit: number;
+  beforeSeq: number | null;
+  afterSeq: number | null;
+}
+
+export interface HistoryPageQueryResult {
+  items: MessageRecord[];
+  hasMore: boolean;
+  latestSeq: number;
+}
+
 export interface MessageStore {
   submitDurable(input: SubmitMessageInput): Promise<MessageCommitResult>;
   getById(messageId: string): Promise<MessageRecord | null>;
@@ -66,6 +79,7 @@ export interface MessageStore {
     clientMessageId: string,
   ): Promise<MessageRecord | null>;
   listByConversation(conversationId: string): Promise<MessageRecord[]>;
+  queryHistoryPage(input: HistoryPageQueryInput): Promise<HistoryPageQueryResult>;
 }
 
 /**
@@ -283,6 +297,32 @@ export class MemoryMessageStore implements MessageStore {
       .sort((a, b) => a.seq - b.seq)
       .map(cloneMessageRecord);
   }
+
+  async queryHistoryPage(input: HistoryPageQueryInput): Promise<HistoryPageQueryResult> {
+    if (!Number.isInteger(input.limit) || input.limit < 1) {
+      throw new Error("History query limit must be a positive integer.");
+    }
+    const allForConversation = [...this.byId.values()].filter(
+      (r) => r.conversationId === input.conversationId,
+    );
+    const latestSeq = allForConversation.reduce((max, r) => (r.seq > max ? r.seq : max), 0);
+
+    if (input.afterSeq !== null) {
+      const matchingAsc = allForConversation
+        .filter((r) => r.seq > input.afterSeq!)
+        .sort((a, b) => a.seq - b.seq);
+      const hasMore = matchingAsc.length > input.limit;
+      const items = matchingAsc.slice(0, input.limit).map(cloneMessageRecord);
+      return { items, hasMore, latestSeq };
+    }
+
+    const matchingDesc = allForConversation
+      .filter((r) => (input.beforeSeq === null ? true : r.seq < input.beforeSeq))
+      .sort((a, b) => b.seq - a.seq);
+    const hasMore = matchingDesc.length > input.limit;
+    const pageAsc = matchingDesc.slice(0, input.limit).reverse().map(cloneMessageRecord);
+    return { items: pageAsc, hasMore, latestSeq };
+  }
 }
 
 export interface MongoMessageDocument {
@@ -305,6 +345,7 @@ export interface MongoInsertOneResultLike {
 
 export interface MongoMessageFindCursorLike<T> {
   sort(spec: Record<string, 1 | -1>): MongoMessageFindCursorLike<T>;
+  limit?(count: number): MongoMessageFindCursorLike<T>;
   toArray(): Promise<T[]>;
 }
 
@@ -317,7 +358,10 @@ export interface MongoMessageCollectionLike {
     doc: MongoMessageDocument,
     options?: Record<string, unknown>,
   ): Promise<MongoInsertOneResultLike>;
-  find(filter: Record<string, unknown>): MongoMessageFindCursorLike<MongoMessageDocument>;
+  find(
+    filter: Record<string, unknown>,
+    options?: Record<string, unknown>,
+  ): MongoMessageFindCursorLike<MongoMessageDocument>;
 }
 
 function isDuplicateKeyError(error: unknown): boolean {
@@ -473,5 +517,60 @@ export class MongoMessageStore implements MessageStore {
   async listByConversation(conversationId: string): Promise<MessageRecord[]> {
     const docs = await this.collection.find({ conversationId }).sort({ seq: 1 }).toArray();
     return docs.map(fromMongoMessageDoc);
+  }
+
+  async queryHistoryPage(input: HistoryPageQueryInput): Promise<HistoryPageQueryResult> {
+    if (!Number.isInteger(input.limit) || input.limit < 1) {
+      throw new Error("History query limit must be a positive integer.");
+    }
+
+    const applySortAndLimit = async (
+      filter: Record<string, unknown>,
+      seqDirection: 1 | -1,
+      cap: number,
+    ): Promise<MongoMessageDocument[]> => {
+      const sorted = this.collection
+        .find(filter, { readConcern: MESSAGE_READ_CONCERN })
+        .sort({ seq: seqDirection });
+      const bounded = typeof sorted.limit === "function" ? sorted.limit(cap) : sorted;
+      return bounded.toArray();
+    };
+
+    const readLatestSeq = async (): Promise<number> => {
+      const latestDocs = await applySortAndLimit({ conversationId: input.conversationId }, -1, 1);
+      if (latestDocs.length === 0) return 0;
+      const sortedDesc = [...latestDocs].sort((a, b) => b.seq - a.seq);
+      return sortedDesc[0]?.seq ?? 0;
+    };
+
+    if (input.afterSeq !== null) {
+      const rawDocs = await applySortAndLimit(
+        { conversationId: input.conversationId, seq: { $gt: input.afterSeq } },
+        1,
+        input.limit + 1,
+      );
+      const hasMore = rawDocs.length > input.limit;
+      const items = rawDocs
+        .slice(0, input.limit)
+        .map(fromMongoMessageDoc)
+        .sort((a, b) => a.seq - b.seq);
+      const latestSeq = await readLatestSeq();
+      return { items, hasMore, latestSeq };
+    }
+
+    const filter: Record<string, unknown> =
+      input.beforeSeq !== null
+        ? { conversationId: input.conversationId, seq: { $lt: input.beforeSeq } }
+        : { conversationId: input.conversationId };
+    const rawDocs = await applySortAndLimit(filter, -1, input.limit + 1);
+    const hasMore = rawDocs.length > input.limit;
+    const pageAsc = rawDocs
+      .slice(0, input.limit)
+      .reverse()
+      .map(fromMongoMessageDoc)
+      .sort((a, b) => a.seq - b.seq);
+    const latestSeq =
+      input.beforeSeq === null ? (pageAsc[pageAsc.length - 1]?.seq ?? 0) : await readLatestSeq();
+    return { items: pageAsc, hasMore, latestSeq };
   }
 }
