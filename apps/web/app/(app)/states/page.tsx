@@ -3,6 +3,7 @@
 import Link from "next/link";
 
 import { ActionLink } from "@/components/ui/action-link";
+import { ReceiveDecryptFixtureShowcase } from "@/components/chat/receive-decrypt-fixture";
 import { SendStateFixtureShowcase } from "@/components/chat/send-state-fixture";
 import { PageHeader } from "@/components/ui/page-header";
 import { PlaceholderNotice } from "@/components/ui/placeholder-notice";
@@ -150,6 +151,7 @@ export default function StatesPage() {
       </section>
 
       <SendStateFixtureShowcase />
+      <ReceiveDecryptFixtureShowcase />
     </div>
   );
 }

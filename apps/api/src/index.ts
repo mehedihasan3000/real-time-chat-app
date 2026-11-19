@@ -7,7 +7,7 @@ import {
   type AppConfig,
 } from "./config.js";
 import { createVerifier } from "./auth/jwt.js";
-import { createSocketServer } from "./socket/index.js";
+import { createLiveMessagePublisher, createSocketServer } from "./socket/index.js";
 
 loadRootEnvFile();
 
@@ -19,7 +19,20 @@ const verifier = createVerifier({
   apiOrigin: config.apiOrigin,
   ...(config.auth.jwksUri ? { jwksUri: config.auth.jwksUri } : {}),
 });
-const app = createApp({ verifier });
+let onMessageCommittedHook:
+  | ((
+      record: import("./messages/store.js").MessageRecord,
+      conversation: import("./conversations/store.js").ConversationRecord,
+    ) => Promise<void>)
+  | null = null;
+const app = createApp({
+  verifier,
+  onMessageCommitted: async (record, conversation) => {
+    if (onMessageCommittedHook) {
+      await onMessageCommittedHook(record, conversation);
+    }
+  },
+});
 
 const server = app.listen(config.port, () => {
   const summary = describeConfig(config);
@@ -35,13 +48,17 @@ const server = app.listen(config.port, () => {
 // the allowed origin is the exact frontend origin only.
 // The socket verifier is the same JWKS verifier shared with the HTTP API.
 const socketVerifier = verifier;
-createSocketServer(server, {
+const io = createSocketServer(server, {
   verifier: socketVerifier,
   sessionLookup: async () => null,
   authorizer: {
     conversationLookup: async () => null,
   },
   allowedOrigins: [config.appOrigin],
+});
+onMessageCommittedHook = createLiveMessagePublisher(io, {
+  sessionLookup: async () => null,
+  conversationLookup: async () => null,
 });
 
 function loadRequiredConfig(): AppConfig {

@@ -2,6 +2,7 @@ import {
   MESSAGE_ALLOWED_PROTOCOL_VERSION,
   MESSAGE_SCHEMA_VERSION,
   type MessageAckSummary,
+  type MessageNewEvent,
 } from "@chat/contracts";
 
 import type { BlockStore } from "../blocks/store.js";
@@ -26,6 +27,26 @@ export function toMessageAckSummary(record: MessageRecord): MessageAckSummary {
     protocolVersion: MESSAGE_ALLOWED_PROTOCOL_VERSION,
     committedAt: record.committedAt,
     schemaVersion: MESSAGE_SCHEMA_VERSION,
+  };
+}
+
+/**
+ * Project an internal `MessageRecord` strictly onto `PUBLIC_FIELDS.messageNew`
+ * for authorized live Socket.IO `/v1` delivery (`P2-06`, `FR-CHAT-005`).
+ * Never exposes `payloadHash` or internal store metadata.
+ */
+export function toMessageNewEvent(record: MessageRecord): MessageNewEvent {
+  return {
+    schemaVersion: MESSAGE_SCHEMA_VERSION,
+    messageId: record.id,
+    conversationId: record.conversationId,
+    seq: record.seq,
+    senderUserId: record.senderUserId,
+    senderDeviceId: record.senderDeviceId,
+    clientMessageId: record.clientMessageId,
+    protocolVersion: MESSAGE_ALLOWED_PROTOCOL_VERSION,
+    encryptedEnvelope: record.encryptedEnvelope,
+    committedAt: record.committedAt,
   };
 }
 

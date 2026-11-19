@@ -12,6 +12,7 @@
  * qualified independent security review of the implemented boundaries.
  */
 export * from "./device/index.js";
+export * from "./envelope/index.js";
 export * from "./olm/index.js";
 
 export const cryptoPackageVersion = "0.2.0";

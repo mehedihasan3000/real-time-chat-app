@@ -48,7 +48,8 @@ function buildWebCsp(apiOrigin: string): string {
       `form-action 'self'`,
       `object-src 'none'`,
       `img-src 'self' data:`,
-      `script-src 'self' 'unsafe-inline'`,
+      // 'wasm-unsafe-eval' enables vodozemac WASM (DEC-018) without permitting JS eval().
+      `script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval'`,
       `style-src 'self' 'unsafe-inline'`,
       `connect-src 'self' ${apiOrigin}`,
     ].join("; ") + ";"

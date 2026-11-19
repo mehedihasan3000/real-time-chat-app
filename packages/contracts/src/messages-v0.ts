@@ -109,6 +109,18 @@ const MESSAGE_ACK_FIELDS = new Set([
 ]);
 
 const SEND_RESPONSE_FIELDS = new Set(["message", "idempotent"]);
+const MESSAGE_NEW_FIELDS = new Set([
+  "schemaVersion",
+  "messageId",
+  "conversationId",
+  "seq",
+  "senderUserId",
+  "senderDeviceId",
+  "clientMessageId",
+  "protocolVersion",
+  "encryptedEnvelope",
+  "committedAt",
+]);
 const FORBIDDEN_ANYWHERE_SET = new Set<string>(MESSAGE_FORBIDDEN_FIELDS);
 
 export interface MessageSendInput {
@@ -148,6 +160,25 @@ export interface MessageAckSummary {
 export interface MessageSendResponse {
   message: MessageAckSummary;
   idempotent: boolean;
+}
+
+/**
+ * Live Socket.IO `/v1` `message:new` event payload (`P2-06`, `FR-CHAT-005`,
+ * `DATA-003`–`DATA-004`, `SRS` §5.3). Carries only opaque ciphertext and
+ * server-authoritative routing/order metadata — never plaintext, private keys,
+ * or `payloadHash`.
+ */
+export interface MessageNewEvent {
+  schemaVersion: 1;
+  messageId: string;
+  conversationId: string;
+  seq: number;
+  senderUserId: string;
+  senderDeviceId: string;
+  clientMessageId: string;
+  protocolVersion: string;
+  encryptedEnvelope: string;
+  committedAt: string;
 }
 
 function isPlainRecord(value: unknown): value is Record<string, unknown> {
@@ -416,6 +447,71 @@ export function validateMessageSendResponse(input: unknown): ValidationResult<Me
     value: {
       message: message.value,
       idempotent: input.idempotent,
+    },
+  };
+}
+
+/**
+ * Validate a server→client `message:new` event payload (`P2-06`, `FR-CHAT-005`,
+ * `NFR-REC-002`, `DATA-004`). Rejects forbidden plaintext/private-key fields,
+ * unknown fields, invalid IDs/seq/timestamps, and oversized envelopes, while
+ * allowing unrecognized `protocolVersion` or corrupted ciphertext bytes through
+ * to client decryption so explicit `unsupported-version` / `tampered-envelope`
+ * placeholders remain identifiable (`FR-CHAT-014`).
+ */
+export function validateMessageNewEvent(input: unknown): ValidationResult<MessageNewEvent> {
+  if (!isPlainRecord(input)) {
+    return invalid("message:new payload must be an object.");
+  }
+  const forbidden = containsForbiddenKey(input, FORBIDDEN_ANYWHERE_SET);
+  if (forbidden) {
+    return invalid(`Forbidden field "${forbidden}" is not permitted in message:new events.`);
+  }
+  if (!hasOnlyAllowedKeys(input, MESSAGE_NEW_FIELDS)) {
+    return invalid("message:new payload contains unknown fields.");
+  }
+  if (input.schemaVersion !== MESSAGE_SCHEMA_VERSION) {
+    return unsupported("Unsupported message:new schemaVersion.");
+  }
+  if (!isOpaqueId(input.messageId)) return invalid("Invalid messageId.");
+  if (!isOpaqueId(input.conversationId)) return invalid("Invalid conversationId.");
+  if (typeof input.seq !== "number" || !Number.isInteger(input.seq) || input.seq < 1) {
+    return invalid("Invalid message seq.");
+  }
+  if (!isOpaqueId(input.senderUserId)) return invalid("Invalid senderUserId.");
+  if (!isDeviceId(input.senderDeviceId)) return invalid("Invalid senderDeviceId.");
+  if (!isRequestId(input.clientMessageId)) return invalid("Invalid clientMessageId.");
+  if (
+    typeof input.protocolVersion !== "string" ||
+    input.protocolVersion.length === 0 ||
+    input.protocolVersion.length > 64 ||
+    /\s/.test(input.protocolVersion)
+  ) {
+    return invalid("Invalid protocolVersion.");
+  }
+  if (typeof input.encryptedEnvelope !== "string" || input.encryptedEnvelope.length === 0) {
+    return invalid("encryptedEnvelope is required.");
+  }
+  if (input.encryptedEnvelope.length > Math.ceil((MESSAGE_MAX_ENVELOPE_BYTES * 4) / 3) + 4) {
+    return payloadTooLarge("encryptedEnvelope exceeds 16 KiB.");
+  }
+  if (typeof input.committedAt !== "string" || Number.isNaN(Date.parse(input.committedAt))) {
+    return invalid("Invalid committedAt timestamp.");
+  }
+
+  return {
+    ok: true,
+    value: {
+      schemaVersion: MESSAGE_SCHEMA_VERSION,
+      messageId: input.messageId,
+      conversationId: input.conversationId,
+      seq: input.seq,
+      senderUserId: input.senderUserId,
+      senderDeviceId: input.senderDeviceId,
+      clientMessageId: input.clientMessageId,
+      protocolVersion: input.protocolVersion,
+      encryptedEnvelope: input.encryptedEnvelope,
+      committedAt: input.committedAt,
     },
   };
 }
