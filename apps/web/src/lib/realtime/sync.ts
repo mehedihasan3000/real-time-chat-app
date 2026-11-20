@@ -76,6 +76,27 @@ export interface CatchUpRunResult {
   error: SyncFailureInfo | null;
 }
 
+export interface RecoverableRetryResult {
+  stale: boolean;
+  retriedCount: number;
+  decryptedCount: number;
+  stillFailedCount: number;
+  newlyDecrypted: readonly ReceivedTimelineMessage[];
+  deliveryEvidence: readonly RecipientDeliveryEvidence[];
+}
+
+export interface RecipientDeliveryEvidence {
+  messageId: string;
+  conversationId: string;
+  seq: number;
+  senderUserId: string;
+  senderDeviceId: string;
+  recipientUserId: string;
+  recipientDeviceId: string;
+  committedAt: string;
+  decryptedAt: string;
+}
+
 export interface ConversationCatchUpSynchronizerOptions {
   accountId: string;
   conversationId: string;
@@ -90,6 +111,8 @@ export interface ConversationCatchUpSynchronizerOptions {
   maxGapRecoveryPasses?: number;
   maxBufferedEvents?: number;
   onReauthRequired?: (code: "UNAUTHENTICATED" | "SESSION_REVOKED") => void;
+  onDeliveryEvidence?: (evidence: readonly RecipientDeliveryEvidence[]) => Promise<void> | void;
+  now?: () => Date;
 }
 
 function mapSyncFailure(error: unknown): SyncFailureInfo {
@@ -124,6 +147,10 @@ export class ConversationCatchUpSynchronizer {
   private readonly maxGapRecoveryPasses: number;
   private readonly maxBufferedEvents: number;
   private readonly onReauthRequired?: (code: "UNAUTHENTICATED" | "SESSION_REVOKED") => void;
+  private readonly onDeliveryEvidence?: (
+    evidence: readonly RecipientDeliveryEvidence[],
+  ) => Promise<void> | void;
+  private readonly nowFn: () => Date;
 
   private epoch = 0;
   private disposed = false;
@@ -139,6 +166,8 @@ export class ConversationCatchUpSynchronizer {
   private liveApplyChain: Promise<void> = Promise.resolve();
 
   private readonly itemsById = new Map<string, ReceivedTimelineMessage>();
+  private readonly recoverableRawItems = new Map<string, HistoryMessageItem | MessageNewEvent>();
+  private readonly deliveryEvidenceById = new Map<string, RecipientDeliveryEvidence>();
   private readonly bufferedLiveEvents = new Map<string, MessageNewEvent>();
   private readonly listeners = new Set<SyncSnapshotListener>();
 
@@ -154,6 +183,8 @@ export class ConversationCatchUpSynchronizer {
     this.maxGapRecoveryPasses = Math.max(1, options.maxGapRecoveryPasses ?? 3);
     this.maxBufferedEvents = Math.max(10, options.maxBufferedEvents ?? 500);
     this.onReauthRequired = options.onReauthRequired;
+    this.onDeliveryEvidence = options.onDeliveryEvidence;
+    this.nowFn = options.now ?? (() => new Date());
 
     if (options.initialItems && options.initialItems.length > 0) {
       this.seedInitialHistory(options.initialItems, options.initialLastAppliedSeq);
@@ -186,6 +217,50 @@ export class ConversationCatchUpSynchronizer {
 
   getLastAppliedSeq(): number {
     return this.lastAppliedSeq;
+  }
+
+  getDeliveryEvidence(): RecipientDeliveryEvidence[] {
+    return [...this.deliveryEvidenceById.values()].sort((a, b) => a.seq - b.seq);
+  }
+
+  getRecoverableFailureCount(): number {
+    return this.recoverableRawItems.size;
+  }
+
+  private recordDecryptedOrRecoverable(
+    rawItem: HistoryMessageItem | MessageNewEvent,
+    converted: ReceivedTimelineMessage,
+    capturedAccountId: string,
+    capturedDevice: DecryptCapableDevice | null,
+  ): RecipientDeliveryEvidence | null {
+    if (converted.kind === "decryption_failed") {
+      if (converted.recoverable) {
+        this.recoverableRawItems.set(converted.messageId, rawItem);
+      }
+      return null;
+    }
+    this.recoverableRawItems.delete(converted.messageId);
+    if (
+      converted.senderUserId === capturedAccountId ||
+      !converted.canEmitDeliveryReceipt ||
+      !capturedDevice ||
+      this.deliveryEvidenceById.has(converted.messageId)
+    ) {
+      return null;
+    }
+    const evidence: RecipientDeliveryEvidence = {
+      messageId: converted.messageId,
+      conversationId: converted.conversationId,
+      seq: converted.seq,
+      senderUserId: converted.senderUserId,
+      senderDeviceId: converted.senderDeviceId,
+      recipientUserId: capturedAccountId,
+      recipientDeviceId: capturedDevice.deviceId,
+      committedAt: converted.committedAt,
+      decryptedAt: this.nowFn().toISOString(),
+    };
+    this.deliveryEvidenceById.set(converted.messageId, evidence);
+    return evidence;
   }
 
   subscribe(listener: SyncSnapshotListener): () => void {
@@ -230,6 +305,9 @@ export class ConversationCatchUpSynchronizer {
         continue;
       }
       this.itemsById.set(item.messageId, item);
+      if (item.kind === "decrypted") {
+        this.recoverableRawItems.delete(item.messageId);
+      }
       if (item.seq > highestSeedSeq) {
         highestSeedSeq = item.seq;
       }
@@ -350,15 +428,23 @@ export class ConversationCatchUpSynchronizer {
     const capturedEpoch = this.epoch;
     const capturedAccountId = this.accountId;
     const capturedConversationId = this.conversationId;
-    const converted = await this.decryptSingleItem(event, this.device);
+    const capturedDevice = this.device;
+    const converted = await this.decryptSingleItem(event, capturedDevice);
     if (this.isStale(capturedEpoch, capturedAccountId, capturedConversationId)) {
       return { action: "ignored" };
     }
     const postAwaitExisting = this.itemsById.get(converted.messageId);
     if (postAwaitExisting && postAwaitExisting.kind === "decrypted") {
+      this.recoverableRawItems.delete(converted.messageId);
       return { action: "duplicate" };
     }
     this.itemsById.set(converted.messageId, converted);
+    const evidence = this.recordDecryptedOrRecoverable(
+      event,
+      converted,
+      capturedAccountId,
+      capturedDevice,
+    );
     if (converted.seq > this.lastAppliedSeq && converted.seq <= this.lastAppliedSeq + 1) {
       this.lastAppliedSeq = converted.seq;
     }
@@ -366,6 +452,13 @@ export class ConversationCatchUpSynchronizer {
       this.phase = "synced";
     }
     this.emit();
+    if (evidence && this.onDeliveryEvidence) {
+      try {
+        await this.onDeliveryEvidence([evidence]);
+      } catch {
+        // Delivery receipt emission failure never removes decrypted messages.
+      }
+    }
     return { action: "applied", item: converted };
   }
 
@@ -455,33 +548,41 @@ export class ConversationCatchUpSynchronizer {
     capturedAccountId: string,
     capturedConversationId: string,
     capturedDevice: DecryptCapableDevice | null,
-  ): Promise<{ fresh: boolean; appliedNew: boolean }> {
+  ): Promise<{ fresh: boolean; appliedNew: boolean; evidence: RecipientDeliveryEvidence | null }> {
     if (this.isStale(capturedEpoch, capturedAccountId, capturedConversationId)) {
-      return { fresh: false, appliedNew: false };
+      return { fresh: false, appliedNew: false, evidence: null };
     }
     if (rawItem.conversationId !== capturedConversationId) {
-      return { fresh: true, appliedNew: false };
+      return { fresh: true, appliedNew: false, evidence: null };
     }
 
     const existing = this.itemsById.get(rawItem.messageId);
     if (existing && existing.kind === "decrypted") {
+      this.recoverableRawItems.delete(rawItem.messageId);
       this.lastAppliedSeq = Math.max(this.lastAppliedSeq, rawItem.seq);
-      return { fresh: true, appliedNew: false };
+      return { fresh: true, appliedNew: false, evidence: null };
     }
 
     const converted = await this.decryptSingleItem(rawItem, capturedDevice);
     if (this.isStale(capturedEpoch, capturedAccountId, capturedConversationId)) {
-      return { fresh: false, appliedNew: false };
+      return { fresh: false, appliedNew: false, evidence: null };
     }
     const postAwait = this.itemsById.get(converted.messageId);
     if (postAwait && postAwait.kind === "decrypted") {
+      this.recoverableRawItems.delete(converted.messageId);
       this.lastAppliedSeq = Math.max(this.lastAppliedSeq, postAwait.seq);
-      return { fresh: true, appliedNew: false };
+      return { fresh: true, appliedNew: false, evidence: null };
     }
 
     this.itemsById.set(converted.messageId, converted);
+    const evidence = this.recordDecryptedOrRecoverable(
+      rawItem,
+      converted,
+      capturedAccountId,
+      capturedDevice,
+    );
     this.lastAppliedSeq = Math.max(this.lastAppliedSeq, converted.seq);
-    return { fresh: true, appliedNew: true };
+    return { fresh: true, appliedNew: true, evidence };
   }
 
   private async executeCatchUpLoop(): Promise<CatchUpRunResult> {
@@ -505,6 +606,7 @@ export class ConversationCatchUpSynchronizer {
     }
 
     let appliedCount = 0;
+    const batchEvidence: RecipientDeliveryEvidence[] = [];
 
     try {
       for (let gapPass = 0; gapPass < this.maxGapRecoveryPasses; gapPass += 1) {
@@ -552,6 +654,9 @@ export class ConversationCatchUpSynchronizer {
             }
             if (outcome.appliedNew) {
               appliedCount += 1;
+            }
+            if (outcome.evidence) {
+              batchEvidence.push(outcome.evidence);
             }
             sawAnyPersistedItemInPass = true;
           }
@@ -628,6 +733,9 @@ export class ConversationCatchUpSynchronizer {
           if (outcome.appliedNew) {
             appliedCount += 1;
           }
+          if (outcome.evidence) {
+            batchEvidence.push(outcome.evidence);
+          }
           this.bufferedLiveEvents.delete(bufferedEvent.messageId);
         }
 
@@ -653,6 +761,14 @@ export class ConversationCatchUpSynchronizer {
       this.lastError = null;
       this.catchUpRuns += 1;
       this.emit();
+
+      if (batchEvidence.length > 0 && this.onDeliveryEvidence) {
+        try {
+          await this.onDeliveryEvidence(batchEvidence);
+        } catch {
+          // Delivery receipt emission failure never removes decrypted messages.
+        }
+      }
 
       return {
         ok: true,
@@ -699,6 +815,8 @@ export class ConversationCatchUpSynchronizer {
       ) {
         this.itemsById.clear();
         this.bufferedLiveEvents.clear();
+        this.recoverableRawItems.clear();
+        this.deliveryEvidenceById.clear();
       }
 
       this.phase = "error";
@@ -727,6 +845,8 @@ export class ConversationCatchUpSynchronizer {
     this.syncAgainRequested = false;
     this.bufferedLiveEvents.clear();
     this.itemsById.clear();
+    this.recoverableRawItems.clear();
+    this.deliveryEvidenceById.clear();
     this.lastAppliedSeq = 0;
     this.phase = "reauth_required";
     this.lastError = {
@@ -750,6 +870,8 @@ export class ConversationCatchUpSynchronizer {
     this.syncAgainRequested = false;
     this.bufferedLiveEvents.clear();
     this.itemsById.clear();
+    this.recoverableRawItems.clear();
+    this.deliveryEvidenceById.clear();
     this.lastAppliedSeq = 0;
     this.lastError = null;
     this.phase = "idle";
@@ -757,7 +879,108 @@ export class ConversationCatchUpSynchronizer {
   }
 
   setDevice(device: DecryptCapableDevice | null): void {
+    if (this.disposed) return;
     this.device = device;
+  }
+
+  async retryRecoverableMessages(): Promise<RecoverableRetryResult> {
+    if (this.disposed) {
+      return {
+        stale: true,
+        retriedCount: 0,
+        decryptedCount: 0,
+        stillFailedCount: 0,
+        newlyDecrypted: [],
+        deliveryEvidence: [],
+      };
+    }
+    if (this.phase === "reauth_required" || !this.device) {
+      return {
+        stale: false,
+        retriedCount: 0,
+        decryptedCount: 0,
+        stillFailedCount: this.recoverableRawItems.size,
+        newlyDecrypted: [],
+        deliveryEvidence: [],
+      };
+    }
+
+    const capturedEpoch = this.epoch;
+    const capturedAccountId = this.accountId;
+    const capturedConversationId = this.conversationId;
+    const capturedDevice = this.device;
+
+    const pendingEntries = [...this.recoverableRawItems.entries()].sort(
+      ([, a], [, b]) => a.seq - b.seq,
+    );
+    let retriedCount = 0;
+    const newlyDecrypted: ReceivedTimelineMessage[] = [];
+    const deliveryEvidence: RecipientDeliveryEvidence[] = [];
+
+    for (const [messageId, rawItem] of pendingEntries) {
+      if (this.isStale(capturedEpoch, capturedAccountId, capturedConversationId)) {
+        return {
+          stale: true,
+          retriedCount,
+          decryptedCount: newlyDecrypted.length,
+          stillFailedCount: this.recoverableRawItems.size,
+          newlyDecrypted,
+          deliveryEvidence,
+        };
+      }
+      if (rawItem.conversationId !== capturedConversationId) {
+        this.recoverableRawItems.delete(messageId);
+        continue;
+      }
+
+      retriedCount += 1;
+      const converted = await this.decryptSingleItem(rawItem, capturedDevice);
+      if (this.isStale(capturedEpoch, capturedAccountId, capturedConversationId)) {
+        return {
+          stale: true,
+          retriedCount,
+          decryptedCount: newlyDecrypted.length,
+          stillFailedCount: this.recoverableRawItems.size,
+          newlyDecrypted,
+          deliveryEvidence,
+        };
+      }
+
+      this.itemsById.set(converted.messageId, converted);
+      const evidence = this.recordDecryptedOrRecoverable(
+        rawItem,
+        converted,
+        capturedAccountId,
+        capturedDevice,
+      );
+      if (converted.kind === "decrypted") {
+        newlyDecrypted.push(converted);
+      }
+      if (evidence) {
+        deliveryEvidence.push(evidence);
+      }
+    }
+
+    if (newlyDecrypted.length > 0) {
+      this.emit();
+    }
+
+    if (deliveryEvidence.length > 0 && this.onDeliveryEvidence) {
+      try {
+        await this.onDeliveryEvidence(deliveryEvidence);
+      } catch {
+        // Delivery receipt emission failure never removes decrypted messages.
+      }
+    }
+
+    return {
+      stale: false,
+      retriedCount,
+      decryptedCount: newlyDecrypted.length,
+      stillFailedCount: this.recoverableRawItems.size,
+      newlyDecrypted,
+      deliveryEvidence,
+    };
   }
 
   switchConversation(
@@ -773,6 +996,8 @@ export class ConversationCatchUpSynchronizer {
     this.syncAgainRequested = false;
     this.bufferedLiveEvents.clear();
     this.itemsById.clear();
+    this.recoverableRawItems.clear();
+    this.deliveryEvidenceById.clear();
     this.lastAppliedSeq = 0;
     this.lastError = null;
     this.phase = this.phase === "reauth_required" ? "reauth_required" : "idle";
@@ -788,6 +1013,8 @@ export class ConversationCatchUpSynchronizer {
     this.syncAgainRequested = false;
     this.bufferedLiveEvents.clear();
     this.itemsById.clear();
+    this.recoverableRawItems.clear();
+    this.deliveryEvidenceById.clear();
     this.lastAppliedSeq = 0;
     this.lastError = null;
     this.phase = "idle";
@@ -800,6 +1027,8 @@ export class ConversationCatchUpSynchronizer {
     this.buffering = false;
     this.bufferedLiveEvents.clear();
     this.itemsById.clear();
+    this.recoverableRawItems.clear();
+    this.deliveryEvidenceById.clear();
     this.listeners.clear();
   }
 }
