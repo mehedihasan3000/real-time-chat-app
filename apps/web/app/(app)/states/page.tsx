@@ -7,6 +7,7 @@ import { EncryptedOutboxFixtureShowcase } from "@/components/chat/encrypted-outb
 import { HistoryFixtureShowcase } from "@/components/chat/history-fixture";
 import { OfflineDeliveryFixtureShowcase } from "@/components/chat/offline-delivery-fixture";
 import { ReceiveDecryptFixtureShowcase } from "@/components/chat/receive-decrypt-fixture";
+import { ReceiptsUnreadFixtureShowcase } from "@/components/chat/receipts-unread-fixture";
 import { ReconnectCatchUpFixtureShowcase } from "@/components/chat/reconnect-catchup-fixture";
 import { SendStateFixtureShowcase } from "@/components/chat/send-state-fixture";
 import { PageHeader } from "@/components/ui/page-header";
@@ -160,6 +161,7 @@ export default function StatesPage() {
       <ReconnectCatchUpFixtureShowcase />
       <EncryptedOutboxFixtureShowcase />
       <OfflineDeliveryFixtureShowcase />
+      <ReceiptsUnreadFixtureShowcase />
     </div>
   );
 }

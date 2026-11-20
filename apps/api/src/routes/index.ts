@@ -16,17 +16,25 @@ import {
   validateMessageSendRequest,
   validatePageLimit,
   validateReportCreate,
+  validateSubmitMessageReceiptRequest,
+  validateUpdateReadProgressRequest,
+  validateUpdateReceiptPreferencesRequest,
   validateUsername,
   type ConversationCreateResponse,
   type ConversationDetailResponse,
   type ConversationListResponse,
+  type ConversationReceiptListResponse,
   type DeviceEnrollmentResponse,
   type DeviceKeyResponse,
   type DeviceListResponse,
   type DevicePublicKeysResponse,
   type DeviceRevocationResponse,
   type KeyBackupLinkResponse,
+  type MessageReceiptDetailResponse,
+  type MessageReceiptEvent,
   type MessageSendResponse,
+  type ReadProgressResponse,
+  type ReceiptPreferencesView,
 } from "@chat/contracts";
 
 import { requireAuth } from "../auth/middleware.js";
@@ -90,6 +98,16 @@ import {
   type MessageStore,
 } from "../messages/index.js";
 import { fetchConversationHistoryPage } from "../history/index.js";
+import {
+  MemoryReceiptStore,
+  getOwnConversationReadProgress,
+  getSingleMessageSenderReceipt,
+  listConversationSenderReceipts,
+  submitMessageReceipt,
+  toReceiptPreferencesView,
+  updateOwnConversationReadProgress,
+  type ReceiptStore,
+} from "../receipts/index.js";
 import { findOperatorKey } from "../security/input.js";
 
 /**
@@ -124,6 +142,11 @@ export interface ApiRouterOptions {
   isBlocked?: BlockPredicate;
   blockStore?: BlockStore;
   reportStore?: ReportStore;
+  receiptStore?: ReceiptStore;
+  onReceiptAdvanced?: (
+    event: MessageReceiptEvent,
+    conversation: ConversationRecord,
+  ) => Promise<void> | void;
   now?: () => Date;
 }
 
@@ -173,6 +196,8 @@ export function createApiRouter(options: ApiRouterOptions): Router {
     isBlocked,
     blockStore = new MemoryBlockStore(),
     reportStore = new MemoryReportStore(),
+    receiptStore = new MemoryReceiptStore(),
+    onReceiptAdvanced,
     now = () => new Date(),
   } = options;
   const blockedBetween: BlockPredicate = isBlocked ?? ((a, b) => blockStore.isBlocked(a, b));
@@ -571,6 +596,238 @@ export function createApiRouter(options: ApiRouterOptions): Router {
         idempotent: commitResult.idempotent,
       };
       response.status(commitResult.idempotent ? 200 : 201).json(successEnvelope(data));
+    },
+  );
+
+  // Read-sharing privacy preferences (P2-11, FR-CHAT-010, DEC-020 §7.2):
+  // strictly opt-in and default-off (false), derived solely from server principal.
+  router.get(
+    "/me/receipt-preferences",
+    auth,
+    read,
+    async (request: PrincipalRequest, response: Response) => {
+      if (principalOrDenial(request, response)) return;
+      response.setHeader("Cache-Control", "no-store");
+      const userId = request.principal?.userId ?? "";
+      const stored = await receiptStore.getPreferences(userId);
+      const data: ReceiptPreferencesView = toReceiptPreferencesView(userId, stored, now());
+      response.status(200).json(successEnvelope(data));
+    },
+  );
+  router.patch(
+    "/me/receipt-preferences",
+    auth,
+    sensitive,
+    async (request: PrincipalRequest, response: Response) => {
+      if (principalOrDenial(request, response)) return;
+      response.setHeader("Cache-Control", "no-store");
+      if (findOperatorKey(request.body)) {
+        sendSafeError(response, 400, "INVALID_REQUEST", "Invalid request body.");
+        return;
+      }
+      const validated = validateUpdateReceiptPreferencesRequest(request.body ?? {});
+      if (!validated.ok) {
+        sendValidationFailure(response, validated);
+        return;
+      }
+      const userId = request.principal?.userId ?? "";
+      const stored = await receiptStore.setPreferences(
+        userId,
+        validated.value.readReceiptsEnabled,
+        now(),
+      );
+      const data: ReceiptPreferencesView = toReceiptPreferencesView(userId, stored, now());
+      response.status(200).json(successEnvelope(data));
+    },
+  );
+
+  // Delivery & read receipts (P2-11, FR-CHAT-009..011, DEC-020, INT-002):
+  // receipts are visible ONLY to message senders; recipients advance state
+  // only with active bound device evidence.
+  router.get(
+    "/conversations/:id/receipts",
+    auth,
+    read,
+    member,
+    async (request: PrincipalRequest, response: Response) => {
+      if (principalOrDenial(request, response)) return;
+      response.setHeader("Cache-Control", "no-store");
+      const requesterUserId = request.principal?.userId ?? "";
+      const conversationId = request.params.id as string | undefined;
+      const storedConversation = conversationId
+        ? await conversationStore.getById(conversationId)
+        : null;
+      if (!storedConversation || !storedConversation.participantIds.includes(requesterUserId)) {
+        sendSafeError(response, 404, "NOT_FOUND", "Resource not found.");
+        return;
+      }
+      const data: ConversationReceiptListResponse = await listConversationSenderReceipts(
+        storedConversation,
+        requesterUserId,
+        receiptStore,
+      );
+      response.status(200).json(successEnvelope(data));
+    },
+  );
+  router.get(
+    "/conversations/:id/messages/:messageId/receipt",
+    auth,
+    read,
+    member,
+    async (request: PrincipalRequest, response: Response) => {
+      if (principalOrDenial(request, response)) return;
+      response.setHeader("Cache-Control", "no-store");
+      const requesterUserId = request.principal?.userId ?? "";
+      const conversationId = request.params.id as string | undefined;
+      const messageId = request.params.messageId as string | undefined;
+      const storedConversation = conversationId
+        ? await conversationStore.getById(conversationId)
+        : null;
+      if (
+        !storedConversation ||
+        !storedConversation.participantIds.includes(requesterUserId) ||
+        !messageId
+      ) {
+        sendSafeError(response, 404, "NOT_FOUND", "Resource not found.");
+        return;
+      }
+      const result = await getSingleMessageSenderReceipt(
+        storedConversation,
+        messageId,
+        requesterUserId,
+        messageStore,
+        receiptStore,
+      );
+      if (!result.ok) {
+        sendSafeError(response, result.status, result.code, result.message);
+        return;
+      }
+      const data: MessageReceiptDetailResponse = result.response;
+      response.status(200).json(successEnvelope(data));
+    },
+  );
+  router.post(
+    "/conversations/:id/messages/:messageId/receipt",
+    auth,
+    sensitive,
+    member,
+    async (request: PrincipalRequest, response: Response) => {
+      if (principalOrDenial(request, response)) return;
+      response.setHeader("Cache-Control", "no-store");
+      if (findOperatorKey(request.body)) {
+        sendSafeError(response, 400, "INVALID_REQUEST", "Invalid request body.");
+        return;
+      }
+      const validated = validateSubmitMessageReceiptRequest(request.body ?? {});
+      if (!validated.ok) {
+        sendValidationFailure(response, validated);
+        return;
+      }
+      const requesterUserId = request.principal?.userId ?? "";
+      const conversationId = request.params.id as string | undefined;
+      const messageId = request.params.messageId as string | undefined;
+      const storedConversation = conversationId
+        ? await conversationStore.getById(conversationId)
+        : null;
+      if (
+        !storedConversation ||
+        !storedConversation.participantIds.includes(requesterUserId) ||
+        !messageId
+      ) {
+        sendSafeError(response, 404, "NOT_FOUND", "Resource not found.");
+        return;
+      }
+      const result = await submitMessageReceipt(
+        storedConversation,
+        messageId,
+        requesterUserId,
+        validated.value,
+        {
+          messageStore,
+          receiptStore,
+          deviceKeyStore,
+          blockStore,
+          isBlocked,
+          now,
+        },
+      );
+      if (!result.ok) {
+        sendSafeError(response, result.status, result.code, result.message);
+        return;
+      }
+      if (result.event && onReceiptAdvanced) {
+        try {
+          await onReceiptAdvanced(result.event, storedConversation);
+        } catch {
+          // Live receipt fan-out failures never turn committed persistence into 500.
+        }
+      }
+      response.status(200).json(successEnvelope(result.response));
+    },
+  );
+
+  // Private per-user read high-water mark & unread count (P2-11, FR-HIST-004, DATA-006).
+  router.get(
+    "/conversations/:id/read-progress",
+    auth,
+    read,
+    member,
+    async (request: PrincipalRequest, response: Response) => {
+      if (principalOrDenial(request, response)) return;
+      response.setHeader("Cache-Control", "no-store");
+      const requesterUserId = request.principal?.userId ?? "";
+      const conversationId = request.params.id as string | undefined;
+      const storedConversation = conversationId
+        ? await conversationStore.getById(conversationId)
+        : null;
+      if (!storedConversation || !storedConversation.participantIds.includes(requesterUserId)) {
+        sendSafeError(response, 404, "NOT_FOUND", "Resource not found.");
+        return;
+      }
+      const data: ReadProgressResponse = await getOwnConversationReadProgress(
+        storedConversation,
+        requesterUserId,
+        messageStore,
+        receiptStore,
+      );
+      response.status(200).json(successEnvelope(data));
+    },
+  );
+  router.post(
+    "/conversations/:id/read-progress",
+    auth,
+    sensitive,
+    member,
+    async (request: PrincipalRequest, response: Response) => {
+      if (principalOrDenial(request, response)) return;
+      response.setHeader("Cache-Control", "no-store");
+      if (findOperatorKey(request.body)) {
+        sendSafeError(response, 400, "INVALID_REQUEST", "Invalid request body.");
+        return;
+      }
+      const validated = validateUpdateReadProgressRequest(request.body ?? {});
+      if (!validated.ok) {
+        sendValidationFailure(response, validated);
+        return;
+      }
+      const requesterUserId = request.principal?.userId ?? "";
+      const conversationId = request.params.id as string | undefined;
+      const storedConversation = conversationId
+        ? await conversationStore.getById(conversationId)
+        : null;
+      if (!storedConversation || !storedConversation.participantIds.includes(requesterUserId)) {
+        sendSafeError(response, 404, "NOT_FOUND", "Resource not found.");
+        return;
+      }
+      const data: ReadProgressResponse = await updateOwnConversationReadProgress(
+        storedConversation,
+        requesterUserId,
+        validated.value,
+        messageStore,
+        receiptStore,
+        now(),
+      );
+      response.status(200).json(successEnvelope(data));
     },
   );
 

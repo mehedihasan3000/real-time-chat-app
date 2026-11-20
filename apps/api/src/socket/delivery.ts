@@ -5,7 +5,9 @@ import {
   conversationRoom,
   isDeviceId,
   successEnvelope,
+  userRoom,
   type MessageNewEvent,
+  type MessageReceiptEvent,
 } from "@chat/contracts";
 
 import { getSessionForSensitive, type SessionLookup } from "../auth/session.js";
@@ -217,5 +219,45 @@ export function createLiveMessagePublisher(
 ): (record: MessageRecord, conversation: ConversationRecord) => Promise<void> {
   return async (record, conversation) => {
     await publishMessageNew(io, record, conversation, options);
+  };
+}
+
+/**
+ * Publish a `"message:receipt"` notification exclusively to the authenticated
+ * message sender's personal room (`user:<senderUserId>`), suppressing emission
+ * silently under bilateral blocks (`FR-CHAT-009`, `DEC-008`).
+ */
+export async function publishMessageReceipt(
+  io: SocketServer,
+  event: MessageReceiptEvent,
+  conversation: ConversationRecord,
+  options: LiveMessageDeliveryOptions = {},
+): Promise<{ emittedSockets: number; suppressedReason?: "blocked" | "non_participant" }> {
+  if (!conversation.participantIds.includes(event.senderUserId)) {
+    return { emittedSockets: 0, suppressedReason: "non_participant" };
+  }
+  const [userA, userB] = conversation.participantIds;
+  if (
+    (options.blockStore && (await options.blockStore.isBlocked(userA, userB))) ||
+    (options.isBlocked && (await options.isBlocked(userA, userB)))
+  ) {
+    return { emittedSockets: 0, suppressedReason: "blocked" };
+  }
+
+  const sockets = await io.of(SOCKET_NAMESPACE).in(userRoom(event.senderUserId)).fetchSockets();
+  let emittedSockets = 0;
+  for (const remote of sockets) {
+    remote.emit("message:receipt", successEnvelope(event));
+    emittedSockets += 1;
+  }
+  return { emittedSockets };
+}
+
+export function createLiveReceiptPublisher(
+  io: SocketServer,
+  options: LiveMessageDeliveryOptions = {},
+): (event: MessageReceiptEvent, conversation: ConversationRecord) => Promise<void> {
+  return async (event, conversation) => {
+    await publishMessageReceipt(io, event, conversation, options);
   };
 }
