@@ -53,6 +53,15 @@ export interface CreateAppOptions {
     event: import("@chat/contracts").MessageReceiptEvent,
     conversation: import("./conversations/store.js").ConversationRecord,
   ) => Promise<void> | void;
+  presenceStore?: import("./presence/store.js").PresenceStore;
+  onPresenceUpdated?: (
+    event: import("@chat/contracts").PresenceUpdateEvent,
+    peerUserId: string,
+  ) => Promise<void> | void;
+  onTypingUpdated?: (
+    event: import("@chat/contracts").TypingUpdateEvent,
+    peerUserId: string,
+  ) => Promise<void> | void;
   metrics?: import("./observability/index.js").MetricsRegistry;
   now?: () => Date;
 }
@@ -115,6 +124,9 @@ export function createApp(options: CreateAppOptions = {}): Express {
     reportStore: options.reportStore,
     receiptStore: options.receiptStore,
     onReceiptAdvanced: options.onReceiptAdvanced,
+    presenceStore: options.presenceStore,
+    onPresenceUpdated: options.onPresenceUpdated,
+    onTypingUpdated: options.onTypingUpdated,
     metrics,
     now: options.now,
   });

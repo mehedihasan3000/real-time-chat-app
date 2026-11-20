@@ -6,17 +6,26 @@ import {
   isDeviceId,
   successEnvelope,
   userRoom,
+  type ErrorCode,
   type MessageNewEvent,
   type MessageReceiptEvent,
+  type PresenceUpdateEvent,
+  type TypingUpdateEvent,
 } from "@chat/contracts";
 
 import { getSessionForSensitive, type SessionLookup } from "../auth/session.js";
 import type { ConversationResource, Principal, ResourceLookup } from "../authz/index.js";
 import type { BlockStore } from "../blocks/store.js";
-import type { ConversationRecord } from "../conversations/store.js";
+import type { ConversationRecord, ConversationStore } from "../conversations/store.js";
 import type { DeviceKeyStore } from "../keys/store.js";
 import type { MessageRecord } from "../messages/store.js";
 import { toMessageNewEvent } from "../messages/view.js";
+import {
+  computePresenceBroadcastsForUser,
+  handleConversationTypingSignal,
+  isPresenceVisibleBetween,
+  type PresenceStore,
+} from "../presence/index.js";
 import type { BlockPredicate } from "../profiles/store.js";
 
 /**
@@ -259,5 +268,217 @@ export function createLiveReceiptPublisher(
 ): (event: MessageReceiptEvent, conversation: ConversationRecord) => Promise<void> {
   return async (event, conversation) => {
     await publishMessageReceipt(io, event, conversation, options);
+  };
+}
+
+export interface LivePresenceDeliveryOptions {
+  sessionLookup?: SessionLookup;
+  now?: () => Date;
+}
+
+async function emitEventToAuthorizedUserSockets(
+  io: SocketServer,
+  targetUserId: string,
+  eventName: "presence:update" | "typing:update",
+  payload: PresenceUpdateEvent | TypingUpdateEvent,
+  options: LivePresenceDeliveryOptions = {},
+): Promise<number> {
+  const nowMs = (options.now ?? (() => new Date()))().getTime();
+  const namespace = io.of(SOCKET_NAMESPACE);
+  let emitted = 0;
+
+  for (const socket of namespace.sockets.values() as Iterable<Socket>) {
+    const data = socket.data as DeliverySocketData;
+    const principal = data.principal;
+    if (!principal || principal.userId !== targetUserId || !principal.emailVerified) {
+      continue;
+    }
+    if (typeof data.tokenExpiresAt === "number" && data.tokenExpiresAt <= nowMs) {
+      continue;
+    }
+    if (options.sessionLookup) {
+      const session = await getSessionForSensitive(options.sessionLookup, principal.sid);
+      if (!session || session.userId !== targetUserId || session.revoked) {
+        continue;
+      }
+    }
+    socket.emit(eventName, successEnvelope(payload));
+    emitted += 1;
+  }
+
+  return emitted;
+}
+
+export async function publishPresenceUpdate(
+  io: SocketServer,
+  event: PresenceUpdateEvent,
+  peerUserId: string,
+  options: LivePresenceDeliveryOptions = {},
+): Promise<number> {
+  return emitEventToAuthorizedUserSockets(io, peerUserId, "presence:update", event, options);
+}
+
+export async function publishTypingUpdate(
+  io: SocketServer,
+  event: TypingUpdateEvent,
+  peerUserId: string,
+  options: LivePresenceDeliveryOptions = {},
+): Promise<number> {
+  return emitEventToAuthorizedUserSockets(io, peerUserId, "typing:update", event, options);
+}
+
+export interface PresenceSocketHooksDependencies {
+  conversationStore: ConversationStore;
+  presenceStore: PresenceStore;
+  blockStore?: BlockStore;
+  isBlocked?: BlockPredicate;
+  sessionLookup?: SessionLookup;
+  now?: () => Date;
+}
+
+/**
+ * Wires Socket.IO `/v1` connect/heartbeat/disconnect/typing lifecycle events
+ * to volatile 60-second multi-tab leases, 5-second typing expiry, 2-second
+ * coalescing, participant-only visibility, activity-sharing privacy, and
+ * bilateral block overrides (`P2-12`, `FR-PRES-001`..`004`, `DEC-008`, `DEC-020`).
+ */
+export function createPresenceSocketHooks(io: SocketServer, deps: PresenceSocketHooksDependencies) {
+  const now = deps.now ?? (() => new Date());
+  const deliveryOpts: LivePresenceDeliveryOptions = {
+    sessionLookup: deps.sessionLookup,
+    now,
+  };
+
+  const broadcastStatusChangeIfVisible = async (
+    userId: string,
+    options: { clearedTypingConversationIds?: readonly string[]; emitStatus: boolean } = {
+      emitStatus: true,
+    },
+  ) => {
+    const targets = await computePresenceBroadcastsForUser(userId, deps, {
+      clearedTypingConversationIds: options.clearedTypingConversationIds,
+    });
+    for (const target of targets) {
+      const visibility = await isPresenceVisibleBetween(target.peerUserId, userId, deps);
+      if (!visibility.visible) {
+        // Blocked or activity-disabled pairs must never receive live connect/disconnect presence traffic.
+        continue;
+      }
+      if (options.emitStatus) {
+        await publishPresenceUpdate(io, target.presenceEvent, target.peerUserId, deliveryOpts);
+      }
+      if (target.clearTypingEvent) {
+        await publishTypingUpdate(io, target.clearTypingEvent, target.peerUserId, deliveryOpts);
+      }
+    }
+  };
+
+  return {
+    onPresenceConnect: async (principal: Principal, connectionId: string) => {
+      const touch = deps.presenceStore.touchConnection(principal.userId, connectionId, now());
+      if (touch.changed) {
+        await broadcastStatusChangeIfVisible(principal.userId, { emitStatus: true });
+      }
+    },
+
+    onPresenceHeartbeat: async (
+      principal: Principal,
+      connectionId: string,
+      opts?: { clearConversationTypingId?: string },
+    ) => {
+      const touch = deps.presenceStore.touchConnection(principal.userId, connectionId, now());
+      let clearedIds: string[] = [];
+      if (opts?.clearConversationTypingId) {
+        clearedIds = deps.presenceStore.clearUserTyping(
+          principal.userId,
+          opts.clearConversationTypingId,
+        );
+      }
+      if (touch.changed || clearedIds.length > 0) {
+        await broadcastStatusChangeIfVisible(principal.userId, {
+          emitStatus: touch.changed,
+          clearedTypingConversationIds: clearedIds,
+        });
+      }
+    },
+
+    onPresenceDisconnect: async (principal: Principal, connectionId: string) => {
+      const disc = deps.presenceStore.disconnectConnection(principal.userId, connectionId, now());
+      if (disc.changed || disc.clearedTypingConversationIds.length > 0) {
+        await broadcastStatusChangeIfVisible(principal.userId, {
+          emitStatus: disc.changed,
+          clearedTypingConversationIds: disc.clearedTypingConversationIds,
+        });
+      }
+    },
+
+    onTyping: async (
+      principal: Principal,
+      connectionId: string,
+      payload: { schemaVersion: number; conversationId?: string; data?: Record<string, unknown> },
+    ): Promise<
+      | { ok: true; suppressBroadcast?: boolean }
+      | { ok: false; code: ErrorCode; message: string; retryable: boolean }
+    > => {
+      const conversationId =
+        payload.conversationId ??
+        (typeof payload.data?.conversationId === "string"
+          ? payload.data.conversationId
+          : undefined);
+      if (!conversationId) {
+        return {
+          ok: false,
+          code: "INVALID_REQUEST",
+          message: "conversationId is required.",
+          retryable: false,
+        };
+      }
+      const isTyping = typeof payload.data?.isTyping === "boolean" ? payload.data.isTyping : true;
+
+      // Refresh caller's 60s connection lease on typing activity.
+      const touch = deps.presenceStore.touchConnection(principal.userId, connectionId, now());
+      if (touch.changed) {
+        await broadcastStatusChangeIfVisible(principal.userId, { emitStatus: true });
+      }
+
+      const handled = await handleConversationTypingSignal(
+        conversationId,
+        principal.userId,
+        isTyping,
+        {
+          conversationStore: deps.conversationStore,
+          presenceStore: deps.presenceStore,
+          blockStore: deps.blockStore,
+          isBlocked: deps.isBlocked,
+          now,
+          connectionId,
+        },
+      );
+      if (!handled.ok) {
+        return {
+          ok: false,
+          code: "FORBIDDEN",
+          message: "Access denied.",
+          retryable: false,
+        };
+      }
+      if (handled.value.response.typing.coalesced) {
+        return {
+          ok: false,
+          code: "RATE_LIMITED",
+          message: "Typing signals are coalesced.",
+          retryable: true,
+        };
+      }
+      if (handled.value.broadcastEvent) {
+        await publishTypingUpdate(
+          io,
+          handled.value.broadcastEvent,
+          handled.value.peerUserId,
+          deliveryOpts,
+        );
+      }
+      return { ok: true, suppressBroadcast: true };
+    },
   };
 }

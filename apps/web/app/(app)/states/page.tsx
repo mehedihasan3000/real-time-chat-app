@@ -6,6 +6,7 @@ import { ActionLink } from "@/components/ui/action-link";
 import { EncryptedOutboxFixtureShowcase } from "@/components/chat/encrypted-outbox-fixture";
 import { HistoryFixtureShowcase } from "@/components/chat/history-fixture";
 import { OfflineDeliveryFixtureShowcase } from "@/components/chat/offline-delivery-fixture";
+import { PresenceTypingFixtureShowcase } from "@/components/chat/presence-typing-fixture";
 import { ReceiveDecryptFixtureShowcase } from "@/components/chat/receive-decrypt-fixture";
 import { ReceiptsUnreadFixtureShowcase } from "@/components/chat/receipts-unread-fixture";
 import { ReconnectCatchUpFixtureShowcase } from "@/components/chat/reconnect-catchup-fixture";
@@ -162,6 +163,7 @@ export default function StatesPage() {
       <EncryptedOutboxFixtureShowcase />
       <OfflineDeliveryFixtureShowcase />
       <ReceiptsUnreadFixtureShowcase />
+      <PresenceTypingFixtureShowcase />
     </div>
   );
 }
