@@ -19,6 +19,7 @@ import {
   successEnvelope,
   validateConversationSubscribePayload,
   validateSocketPayload,
+  type ErrorCode,
 } from "@chat/contracts";
 
 import type { createVerifier } from "../auth/jwt.js";
@@ -68,6 +69,21 @@ export interface SocketServerOptions {
     principal: Principal,
     payload: { schemaVersion: number; conversationId?: string; data?: Record<string, unknown> },
   ) => Promise<void> | void;
+  onPresenceConnect?: (principal: Principal, connectionId: string) => Promise<void> | void;
+  onPresenceHeartbeat?: (
+    principal: Principal,
+    connectionId: string,
+    options?: { clearConversationTypingId?: string },
+  ) => Promise<void> | void;
+  onPresenceDisconnect?: (principal: Principal, connectionId: string) => Promise<void> | void;
+  onTyping?: (
+    principal: Principal,
+    connectionId: string,
+    payload: { schemaVersion: number; conversationId?: string; data?: Record<string, unknown> },
+  ) => Promise<
+    | { ok: true; suppressBroadcast?: boolean; broadcastPayload?: Record<string, unknown> }
+    | { ok: false; code: ErrorCode; message: string; retryable: boolean }
+  >;
 }
 
 interface SocketData {
@@ -193,6 +209,11 @@ export function createSocketServer(
     void socket.join(userRoom(userId));
     scheduleExpiry(socket, data.tokenExpiresAt ?? Date.now() + REFRESH_MAX_INTERVAL_MS);
     socket.emit("connected", successEnvelope({ userId }));
+    if (options.onPresenceConnect) {
+      void Promise.resolve(options.onPresenceConnect(data.principal, socket.id)).catch(() => {
+        // Presence update failures must never drop the authenticated connection.
+      });
+    }
 
     const principal = (): Principal | null => (socket.data as SocketData).principal ?? null;
 
@@ -260,6 +281,11 @@ export function createSocketServer(
         (socket.data as SocketData).principal = refreshed;
         (socket.data as SocketData).tokenExpiresAt = claims.exp * 1000;
         scheduleExpiry(socket, claims.exp * 1000);
+        if (options.onPresenceHeartbeat) {
+          void Promise.resolve(options.onPresenceHeartbeat(refreshed, socket.id)).catch(() => {
+            // Presence lease refresh must not fail token refresh.
+          });
+        }
         respond(successEnvelope({ ok: true }));
       } catch {
         expireAndDisconnect(respond);
@@ -301,6 +327,15 @@ export function createSocketServer(
         return;
       }
       await socket.join(conversationRoom(conversationId));
+      if (options.onPresenceHeartbeat) {
+        void Promise.resolve(
+          options.onPresenceHeartbeat(activePrincipal, socket.id, {
+            clearConversationTypingId: conversationId,
+          }),
+        ).catch(() => {
+          // Presence lease refresh must not break room subscription.
+        });
+      }
       respond(successEnvelope({ conversationId, subscribed: true }));
     };
 
@@ -333,7 +368,7 @@ export function createSocketServer(
     socket.on(SOCKET_UNSUBSCRIBE_EVENT, handleConversationUnsubscribe);
     socket.on("leave", handleConversationUnsubscribe);
 
-    socket.on("typing", async (payload: unknown, callback?: (body: unknown) => void) => {
+    const handleTyping = async (payload: unknown, callback?: (body: unknown) => void) => {
       const respond = (body: unknown) => {
         if (typeof callback === "function") callback(body);
       };
@@ -341,8 +376,23 @@ export function createSocketServer(
         respond(errorAck("RATE_LIMITED", "Event rate limit exceeded."));
         return;
       }
+      const rawData =
+        typeof payload === "object" && payload !== null && "data" in payload
+          ? (payload as Record<string, unknown>).data
+          : undefined;
+      const requestedIsTyping =
+        typeof rawData === "object" &&
+        rawData !== null &&
+        typeof (rawData as Record<string, unknown>).isTyping === "boolean"
+          ? ((rawData as Record<string, unknown>).isTyping as boolean)
+          : true;
+
       const now = Date.now();
-      if (now - ((socket.data as SocketData).lastTypingAt ?? 0) < TYPING_COALESCE_MS) {
+      if (
+        requestedIsTyping &&
+        !options.onTyping &&
+        now - ((socket.data as SocketData).lastTypingAt ?? 0) < TYPING_COALESCE_MS
+      ) {
         respond(errorAck("RATE_LIMITED", "Typing signals are coalesced."));
         return;
       }
@@ -351,9 +401,14 @@ export function createSocketServer(
         respond(failureEnvelope(validated.code as never, validated.message, validated.retryable));
         return;
       }
+      const activePrincipal = await ensureSocketSessionActive();
+      if (!activePrincipal) {
+        expireAndDisconnect(respond);
+        return;
+      }
       // Per-event authorization recheck (INT-004) at event time.
       const result = await authorizeSocketEvent(
-        principal(),
+        activePrincipal,
         "typing:update",
         payload,
         options.authorizer,
@@ -364,13 +419,36 @@ export function createSocketServer(
         );
         return;
       }
-      (socket.data as SocketData).lastTypingAt = now;
+      if (options.onTyping) {
+        const handled = await options.onTyping(activePrincipal, socket.id, validated.value);
+        if (!handled.ok) {
+          respond(failureEnvelope(handled.code, handled.message, handled.retryable));
+          return;
+        }
+        if (requestedIsTyping) {
+          (socket.data as SocketData).lastTypingAt = now;
+        }
+        if (!handled.suppressBroadcast && validated.value.conversationId) {
+          socket
+            .to(conversationRoom(validated.value.conversationId))
+            .emit("typing:update", handled.broadcastPayload ?? validated.value);
+        }
+        respond(successEnvelope({ ok: true }));
+        return;
+      }
+
+      if (requestedIsTyping) {
+        (socket.data as SocketData).lastTypingAt = now;
+      }
       const conversationId = validated.value.conversationId;
       if (conversationId) {
         socket.to(conversationRoom(conversationId)).emit("typing:update", validated.value);
       }
       respond(successEnvelope({ ok: true }));
-    });
+    };
+
+    socket.on("typing", handleTyping);
+    socket.on("typing:set", handleTyping);
 
     socket.on("receipt", async (payload: unknown, callback?: (body: unknown) => void) => {
       const respond = (body: unknown) => {
@@ -421,6 +499,12 @@ export function createSocketServer(
         respond(errorAck("RATE_LIMITED", "Event rate limit exceeded."));
         return;
       }
+      const active = principal();
+      if (active && options.onPresenceHeartbeat) {
+        void Promise.resolve(options.onPresenceHeartbeat(active, socket.id)).catch(() => {
+          // Presence heartbeat must never disrupt ping acks.
+        });
+      }
       respond(successEnvelope({ ok: true }));
     });
 
@@ -453,6 +537,12 @@ export function createSocketServer(
     socket.on("disconnect", () => {
       clearTimeout((socket.data as SocketData).expiryTimer);
       (socket.data as SocketData).eventTimes = undefined;
+      const active = principal();
+      if (active && options.onPresenceDisconnect) {
+        void Promise.resolve(options.onPresenceDisconnect(active, socket.id)).catch(() => {
+          // Presence disconnect cleanup must be fail-safe.
+        });
+      }
     });
   });
 

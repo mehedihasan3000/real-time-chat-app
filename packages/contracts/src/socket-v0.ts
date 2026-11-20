@@ -24,6 +24,7 @@ export const SOCKET_CLIENT_EVENTS = [
   "join",
   "leave",
   "typing",
+  "typing:set",
   "receipt",
   "ping",
 ] as const;

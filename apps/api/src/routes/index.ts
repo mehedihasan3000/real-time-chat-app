@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from "express";
 
 import {
+  PRESENCE_SCHEMA_VERSION,
   failureEnvelope,
   successEnvelope,
   validateBlockCreate,
@@ -17,12 +18,16 @@ import {
   validatePageLimit,
   validateReportCreate,
   validateSubmitMessageReceiptRequest,
+  validateTypingSignalRequest,
+  validateUpdateActivityPreferencesRequest,
   validateUpdateReadProgressRequest,
   validateUpdateReceiptPreferencesRequest,
   validateUsername,
+  type ActivityPreferencesView,
   type ConversationCreateResponse,
   type ConversationDetailResponse,
   type ConversationListResponse,
+  type ConversationPresenceResponse,
   type ConversationReceiptListResponse,
   type DeviceEnrollmentResponse,
   type DeviceKeyResponse,
@@ -33,8 +38,11 @@ import {
   type MessageReceiptDetailResponse,
   type MessageReceiptEvent,
   type MessageSendResponse,
+  type PresenceUpdateEvent,
   type ReadProgressResponse,
   type ReceiptPreferencesView,
+  type TypingSignalResponse,
+  type TypingUpdateEvent,
 } from "@chat/contracts";
 
 import { requireAuth } from "../auth/middleware.js";
@@ -108,6 +116,14 @@ import {
   updateOwnConversationReadProgress,
   type ReceiptStore,
 } from "../receipts/index.js";
+import {
+  InMemoryPresenceStore,
+  computePresenceBroadcastsForUser,
+  getConversationPeerPresence,
+  handleConversationTypingSignal,
+  toActivityPreferencesView,
+  type PresenceStore,
+} from "../presence/index.js";
 import { findOperatorKey } from "../security/input.js";
 
 /**
@@ -147,6 +163,9 @@ export interface ApiRouterOptions {
     event: MessageReceiptEvent,
     conversation: ConversationRecord,
   ) => Promise<void> | void;
+  presenceStore?: PresenceStore;
+  onPresenceUpdated?: (event: PresenceUpdateEvent, peerUserId: string) => Promise<void> | void;
+  onTypingUpdated?: (event: TypingUpdateEvent, peerUserId: string) => Promise<void> | void;
   now?: () => Date;
 }
 
@@ -198,6 +217,9 @@ export function createApiRouter(options: ApiRouterOptions): Router {
     reportStore = new MemoryReportStore(),
     receiptStore = new MemoryReceiptStore(),
     onReceiptAdvanced,
+    presenceStore = new InMemoryPresenceStore(),
+    onPresenceUpdated,
+    onTypingUpdated,
     now = () => new Date(),
   } = options;
   const blockedBetween: BlockPredicate = isBlocked ?? ((a, b) => blockStore.isBlocked(a, b));
@@ -637,6 +659,159 @@ export function createApiRouter(options: ApiRouterOptions): Router {
         now(),
       );
       const data: ReceiptPreferencesView = toReceiptPreferencesView(userId, stored, now());
+      response.status(200).json(successEnvelope(data));
+    },
+  );
+
+  // Activity-sharing preferences, peer presence, and typing signals (P2-12,
+  // FR-PRES-001..004, DEC-008, DEC-014..016, DEC-020 §6.3).
+  router.get(
+    "/me/activity-preferences",
+    auth,
+    read,
+    async (request: PrincipalRequest, response: Response) => {
+      if (principalOrDenial(request, response)) return;
+      response.setHeader("Cache-Control", "no-store");
+      const userId = request.principal?.userId ?? "";
+      const stored = await presenceStore.getPreferences(userId);
+      const data: ActivityPreferencesView = toActivityPreferencesView(userId, stored, now());
+      response.status(200).json(successEnvelope(data));
+    },
+  );
+  router.patch(
+    "/me/activity-preferences",
+    auth,
+    sensitive,
+    async (request: PrincipalRequest, response: Response) => {
+      if (principalOrDenial(request, response)) return;
+      response.setHeader("Cache-Control", "no-store");
+      if (findOperatorKey(request.body)) {
+        sendSafeError(response, 400, "INVALID_REQUEST", "Invalid request body.");
+        return;
+      }
+      const validated = validateUpdateActivityPreferencesRequest(request.body ?? {});
+      if (!validated.ok) {
+        sendValidationFailure(response, validated);
+        return;
+      }
+      const userId = request.principal?.userId ?? "";
+      const currentNow = now();
+      const { record, clearedTypingConversationIds } = await presenceStore.setPreferences(
+        userId,
+        validated.value.activitySharingEnabled,
+        currentNow.toISOString(),
+      );
+
+      if (onPresenceUpdated || onTypingUpdated) {
+        try {
+          const targets = await computePresenceBroadcastsForUser(
+            userId,
+            {
+              conversationStore,
+              presenceStore,
+              blockStore,
+              isBlocked: blockedBetween,
+              now: () => currentNow,
+            },
+            {
+              clearedTypingConversationIds,
+              maskedOnly: !validated.value.activitySharingEnabled,
+            },
+          );
+          for (const target of targets) {
+            if (await blockedBetween(target.peerUserId, userId)) continue;
+            if (onPresenceUpdated) {
+              await onPresenceUpdated(target.presenceEvent, target.peerUserId);
+            }
+            if (onTypingUpdated && target.clearTypingEvent) {
+              await onTypingUpdated(target.clearTypingEvent, target.peerUserId);
+            }
+          }
+        } catch {
+          // Live presence notification failures must never abort saving preference state.
+        }
+      }
+
+      const data: ActivityPreferencesView = toActivityPreferencesView(userId, record, currentNow);
+      response.status(200).json(successEnvelope(data));
+    },
+  );
+  router.get(
+    "/conversations/:id/presence",
+    auth,
+    read,
+    member,
+    async (request: PrincipalRequest, response: Response) => {
+      if (principalOrDenial(request, response)) return;
+      response.setHeader("Cache-Control", "no-store");
+      const requesterUserId = request.principal?.userId ?? "";
+      const conversationId = request.params.id as string | undefined;
+      if (!conversationId) {
+        sendSafeError(response, 404, "NOT_FOUND", "Resource not found.");
+        return;
+      }
+      const result = await getConversationPeerPresence(conversationId, requesterUserId, {
+        conversationStore,
+        presenceStore,
+        blockStore,
+        isBlocked: blockedBetween,
+        now,
+      });
+      if (!result.ok) {
+        sendSafeError(response, result.status, result.code, result.message);
+        return;
+      }
+      const data: ConversationPresenceResponse = result.value;
+      response.status(200).json(successEnvelope(data));
+    },
+  );
+  router.post(
+    "/conversations/:id/typing",
+    auth,
+    sensitive,
+    member,
+    async (request: PrincipalRequest, response: Response) => {
+      if (principalOrDenial(request, response)) return;
+      response.setHeader("Cache-Control", "no-store");
+      if (findOperatorKey(request.body)) {
+        sendSafeError(response, 400, "INVALID_REQUEST", "Invalid request body.");
+        return;
+      }
+      const validated = validateTypingSignalRequest(request.body ?? {});
+      if (!validated.ok) {
+        sendValidationFailure(response, validated);
+        return;
+      }
+      const requesterUserId = request.principal?.userId ?? "";
+      const conversationId = request.params.id as string | undefined;
+      if (!conversationId) {
+        sendSafeError(response, 404, "NOT_FOUND", "Resource not found.");
+        return;
+      }
+      const result = await handleConversationTypingSignal(
+        conversationId,
+        requesterUserId,
+        validated.value.isTyping,
+        {
+          conversationStore,
+          presenceStore,
+          blockStore,
+          isBlocked: blockedBetween,
+          now,
+        },
+      );
+      if (!result.ok) {
+        sendSafeError(response, result.status, result.code, result.message);
+        return;
+      }
+      if (result.value.broadcastEvent && onTypingUpdated) {
+        try {
+          await onTypingUpdated(result.value.broadcastEvent, result.value.peerUserId);
+        } catch {
+          // Live typing fan-out failures must not fail HTTP request handling.
+        }
+      }
+      const data: TypingSignalResponse = result.value.response;
       response.status(200).json(successEnvelope(data));
     },
   );
@@ -1108,6 +1283,46 @@ export function createApiRouter(options: ApiRouterOptions): Router {
     if (result === "LIMIT") {
       response.status(429).json(failureEnvelope("RATE_LIMITED", "Block limit reached.", false));
       return;
+    }
+    // Bilateral block immediately clears and masks presence & typing between the pair (DEC-008).
+    presenceStore.clearUserTyping(blocker);
+    presenceStore.clearUserTyping(result.blockedUserId);
+    const sharedConv = await conversationStore.getByPair(blocker, result.blockedUserId);
+    if (sharedConv && (onPresenceUpdated || onTypingUpdated)) {
+      const updatedAt = now().toISOString();
+      const emitClearPair = async (subjectUserId: string, peerUserId: string) => {
+        if (onPresenceUpdated) {
+          await onPresenceUpdated(
+            {
+              schemaVersion: PRESENCE_SCHEMA_VERSION,
+              conversationId: sharedConv.id,
+              userId: subjectUserId,
+              status: "unknown",
+              updatedAt,
+            },
+            peerUserId,
+          );
+        }
+        if (onTypingUpdated) {
+          await onTypingUpdated(
+            {
+              schemaVersion: PRESENCE_SCHEMA_VERSION,
+              conversationId: sharedConv.id,
+              userId: subjectUserId,
+              isTyping: false,
+              expiresAt: null,
+              updatedAt,
+            },
+            peerUserId,
+          );
+        }
+      };
+      try {
+        await emitClearPair(blocker, result.blockedUserId);
+        await emitClearPair(result.blockedUserId, blocker);
+      } catch {
+        // Block creation stays authoritative even if live socket clear fails.
+      }
     }
     response.status(200).json(successEnvelope({ blockedUserId: result.blockedUserId }));
   });
