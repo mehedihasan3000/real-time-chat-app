@@ -23,6 +23,8 @@ import {
   ConversationCatchUpSynchronizer,
   type CatchUpRunResult,
   type ConversationSyncSnapshot,
+  type RecipientDeliveryEvidence,
+  type RecoverableRetryResult,
   type SyncFailureInfo,
 } from "./sync";
 
@@ -94,6 +96,8 @@ export interface RealtimeClientOptions {
   expectedPeerIdentityKey?: string;
   expectedPeerSenderKey?: string;
   onReauthRequired?: (reason: ReauthReason) => void;
+  onDeliveryEvidence?: (evidence: readonly RecipientDeliveryEvidence[]) => Promise<void> | void;
+  now?: () => Date;
 }
 
 export interface RealtimeClientSnapshot {
@@ -244,6 +248,8 @@ export class RealtimeClient {
       maxBufferedEvents: options.maxBufferedEvents,
       expectedPeerIdentityKey: options.expectedPeerIdentityKey,
       expectedPeerSenderKey: options.expectedPeerSenderKey,
+      onDeliveryEvidence: options.onDeliveryEvidence,
+      now: options.now,
     });
 
     this.unsubSynchronizer = this.synchronizer.subscribe((syncSnapshot) => {
@@ -765,6 +771,21 @@ export class RealtimeClient {
       this.emit();
     }
     return result;
+  }
+
+  /** Update the local decrypt device (e.g. after unlocking/unsealing state). */
+  setDevice(device: DecryptCapableDevice | null): void {
+    if (this.disposed) return;
+    this.synchronizer.setDevice(device);
+  }
+
+  /** Re-attempt decryption of previously locked/recoverable messages and emit qualifying delivery evidence. */
+  async retryRecoverableMessages(): Promise<RecoverableRetryResult> {
+    return this.synchronizer.retryRecoverableMessages();
+  }
+
+  getDeliveryEvidence(): RecipientDeliveryEvidence[] {
+    return this.synchronizer.getDeliveryEvidence();
   }
 
   /**

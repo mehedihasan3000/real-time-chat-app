@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   MESSAGE_ALLOWED_PROTOCOL_VERSION,
   MESSAGE_SCHEMA_VERSION,
+  isDeviceId,
   type MessageProtocolVersion,
 } from "@chat/contracts";
 
@@ -70,6 +71,35 @@ export interface HistoryPageQueryResult {
   latestSeq: number;
 }
 
+export interface DeleteUndeliveredForRecipientDeviceInput {
+  conversationIds: readonly string[];
+  recipientUserId: string;
+  recipientDeviceId: string;
+  isDelivered?: (messageId: string) => boolean;
+}
+
+/**
+ * Inspect a persisted wire envelope header for `recipientDeviceId` without
+ * accessing private keys or decrypting message content (`FR-SEC-010`, `DEC-004` §4.4).
+ */
+export function extractStoredEnvelopeRecipientDeviceId(encryptedEnvelope: string): string | null {
+  try {
+    const padded = encryptedEnvelope.replace(/-/g, "+").replace(/_/g, "/");
+    const withPad = padded + "=".repeat((4 - (padded.length % 4)) % 4);
+    const parsed = JSON.parse(Buffer.from(withPad, "base64").toString("utf8")) as unknown;
+    if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      isDeviceId((parsed as { recipientDeviceId?: unknown }).recipientDeviceId)
+    ) {
+      return (parsed as { recipientDeviceId: string }).recipientDeviceId;
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export interface MessageStore {
   submitDurable(input: SubmitMessageInput): Promise<MessageCommitResult>;
   getById(messageId: string): Promise<MessageRecord | null>;
@@ -80,6 +110,10 @@ export interface MessageStore {
   ): Promise<MessageRecord | null>;
   listByConversation(conversationId: string): Promise<MessageRecord[]>;
   queryHistoryPage(input: HistoryPageQueryInput): Promise<HistoryPageQueryResult>;
+  deleteBySenderUserId(senderUserId: string): Promise<number>;
+  deleteUndeliveredForRecipientDevice(
+    input: DeleteUndeliveredForRecipientDeviceInput,
+  ): Promise<number>;
 }
 
 /**
@@ -323,6 +357,46 @@ export class MemoryMessageStore implements MessageStore {
     const pageAsc = matchingDesc.slice(0, input.limit).reverse().map(cloneMessageRecord);
     return { items: pageAsc, hasMore, latestSeq };
   }
+
+  private deleteRecord(record: MessageRecord): void {
+    this.byId.delete(record.id);
+    this.byIdemKey.delete(
+      idempotencyKeyString(record.senderUserId, record.senderDeviceId, record.clientMessageId),
+    );
+    this.byConvSeq.delete(`${record.conversationId}:${record.seq}`);
+  }
+
+  async deleteBySenderUserId(senderUserId: string): Promise<number> {
+    let deleted = 0;
+    for (const record of [...this.byId.values()]) {
+      if (record.senderUserId === senderUserId) {
+        this.deleteRecord(record);
+        deleted += 1;
+      }
+    }
+    return deleted;
+  }
+
+  async deleteUndeliveredForRecipientDevice(
+    input: DeleteUndeliveredForRecipientDeviceInput,
+  ): Promise<number> {
+    if (input.conversationIds.length === 0) return 0;
+    const convSet = new Set(input.conversationIds);
+    let deleted = 0;
+    for (const record of [...this.byId.values()]) {
+      if (!convSet.has(record.conversationId)) continue;
+      if (record.senderUserId === input.recipientUserId) continue;
+      if (
+        extractStoredEnvelopeRecipientDeviceId(record.encryptedEnvelope) !== input.recipientDeviceId
+      ) {
+        continue;
+      }
+      if (input.isDelivered?.(record.id)) continue;
+      this.deleteRecord(record);
+      deleted += 1;
+    }
+    return deleted;
+  }
 }
 
 export interface MongoMessageDocument {
@@ -362,6 +436,10 @@ export interface MongoMessageCollectionLike {
     filter: Record<string, unknown>,
     options?: Record<string, unknown>,
   ): MongoMessageFindCursorLike<MongoMessageDocument>;
+  deleteMany?(
+    filter: Record<string, unknown>,
+    options?: Record<string, unknown>,
+  ): Promise<{ deletedCount?: number }>;
 }
 
 function isDuplicateKeyError(error: unknown): boolean {
@@ -572,5 +650,47 @@ export class MongoMessageStore implements MessageStore {
     const latestSeq =
       input.beforeSeq === null ? (pageAsc[pageAsc.length - 1]?.seq ?? 0) : await readLatestSeq();
     return { items: pageAsc, hasMore, latestSeq };
+  }
+
+  async deleteBySenderUserId(senderUserId: string): Promise<number> {
+    if (!this.collection.deleteMany) return 0;
+    const result = await this.collection.deleteMany(
+      { senderUserId },
+      { writeConcern: MESSAGE_WRITE_CONCERN },
+    );
+    return result?.deletedCount ?? 0;
+  }
+
+  async deleteUndeliveredForRecipientDevice(
+    input: DeleteUndeliveredForRecipientDeviceInput,
+  ): Promise<number> {
+    if (input.conversationIds.length === 0 || !this.collection.deleteMany) {
+      return 0;
+    }
+    const candidates = await this.collection
+      .find(
+        {
+          conversationId: { $in: [...input.conversationIds] },
+          senderUserId: { $ne: input.recipientUserId },
+        },
+        { readConcern: MESSAGE_READ_CONCERN },
+      )
+      .toArray();
+    const idsToDelete = candidates
+      .filter((doc) => {
+        if (
+          extractStoredEnvelopeRecipientDeviceId(doc.encryptedEnvelope) !== input.recipientDeviceId
+        ) {
+          return false;
+        }
+        return !(input.isDelivered?.(doc._id) ?? false);
+      })
+      .map((doc) => doc._id);
+    if (idsToDelete.length === 0) return 0;
+    const result = await this.collection.deleteMany(
+      { _id: { $in: idsToDelete } },
+      { writeConcern: MESSAGE_WRITE_CONCERN },
+    );
+    return result?.deletedCount ?? idsToDelete.length;
   }
 }
