@@ -64,6 +64,10 @@ export interface SocketServerOptions {
   authorizer: SocketAuthorizer;
   /** Exact frontend origins allowed to open sockets. Empty → deny all. */
   allowedOrigins: string[];
+  onReceipt?: (
+    principal: Principal,
+    payload: { schemaVersion: number; conversationId?: string; data?: Record<string, unknown> },
+  ) => Promise<void> | void;
 }
 
 interface SocketData {
@@ -393,6 +397,18 @@ export function createSocketServer(
           failureEnvelope(result.denial.code, result.denial.message, result.denial.retryable),
         );
         return;
+      }
+      const active = principal();
+      if (!active) {
+        respond(failureEnvelope("UNAUTHENTICATED", "Authentication required.", false));
+        return;
+      }
+      if (options.onReceipt) {
+        try {
+          await options.onReceipt(active, validated.value);
+        } catch {
+          // Receipt hook failures must not break validated ack responses.
+        }
       }
       respond(successEnvelope({ ok: true }));
     });

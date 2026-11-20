@@ -48,6 +48,11 @@ export interface CreateAppOptions {
   isBlocked?: import("./profiles/store.js").BlockPredicate;
   blockStore?: import("./blocks/store.js").BlockStore;
   reportStore?: import("./reports/store.js").ReportStore;
+  receiptStore?: import("./receipts/store.js").ReceiptStore;
+  onReceiptAdvanced?: (
+    event: import("@chat/contracts").MessageReceiptEvent,
+    conversation: import("./conversations/store.js").ConversationRecord,
+  ) => Promise<void> | void;
   metrics?: import("./observability/index.js").MetricsRegistry;
   now?: () => Date;
 }
@@ -108,6 +113,8 @@ export function createApp(options: CreateAppOptions = {}): Express {
     isBlocked: options.isBlocked,
     blockStore: options.blockStore,
     reportStore: options.reportStore,
+    receiptStore: options.receiptStore,
+    onReceiptAdvanced: options.onReceiptAdvanced,
     metrics,
     now: options.now,
   });
